@@ -1,18 +1,32 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { useEffect } from 'react';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { useFonts } from 'expo-font';
+import { Slot, SplashScreen } from 'expo-router';
 
-SplashScreen.preventAutoHideAsync();
+import AppBackground from '@/components/shared/AppBackground';
+import '../global.css';
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+const RootLayout = () => {
+
+  SplashScreen.preventAutoHideAsync();
+
+  const [fontsLoaded, error] = useFonts({
+    'RobotoSlab-Regular': require('../../assets/fonts/RobotoSlab-Regular.ttf'),
+    'RobotoSlab-Bold': require('../../assets/fonts/RobotoSlab-Bold.ttf')
+  });
+
+  useEffect(() => {
+    if(error) throw error;
+    if(fontsLoaded) SplashScreen.hideAsync();
+  }, [fontsLoaded, error]);
+
+  if(!fontsLoaded && !error) return null;
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
-  );
+    <AppBackground>
+      <Slot />
+    </AppBackground>
+  )
 }
+
+export default RootLayout

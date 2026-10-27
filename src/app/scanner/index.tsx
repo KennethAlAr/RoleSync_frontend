@@ -1,0 +1,93 @@
+import { useEffect, useState } from 'react';
+import { Alert, StyleSheet, Text, View } from 'react-native';
+
+import { Camera, CameraView } from 'expo-camera';
+import { useRouter } from 'expo-router';
+
+import SecondaryLink from '@/components/shared/SecondaryLink';
+
+const ScannerScreen = () => {
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [scanned, setScanned] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setHasPermission(status === 'granted');
+    })();
+  }, []);
+  
+  const handleQRScanned = ({ data }: { data: string }) => {
+    setScanned(true);
+    console.log("Código QR escaneado:", data);
+
+    // Aquí recibes el string del QR (tokens, JSONs, IDs de sesión, etc.)
+    Alert.alert(
+      'Código QR Escaneado',
+      `Contenido:\n\n${data}`,
+      [
+        {
+          text: 'Escanear de nuevo',
+          onPress: () => setScanned(false), // Reactiva la cámara
+        },
+        {
+          text: 'Aceptar',
+          onPress: () => {
+            // Ejemplo: redirigir o guardar datos antes de volver
+            router.push({
+              pathname: '/player', // Ajusta '/player' a la ruta de tu archivo en la carpeta app/
+              params: { qrContent: data }
+            });
+          },
+        },
+      ]
+    );
+  };
+
+  if (hasPermission === null) {
+    return <View className="flex-1" />;
+  }
+
+  if (hasPermission === false) {
+    return (
+      <View className="flex-1 justify-center items-center p-6">
+        <Text className="text-white text-center font-roboto-regular mb-4">
+          No tenemos acceso a la cámara.{'\n'} Por favor, actívalo en los ajustes.
+        </Text>
+        <SecondaryLink 
+              title="Volver" 
+              onPress={() => router.back()} 
+              className="text-center"
+            />
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex-1 justify-center items-center p-6 py-10">
+      
+      <View className="w-96 h-96 rounded-2xl overflow-hidden border-2 border-primary shadow-2xl bg-black">
+        <CameraView 
+          style={StyleSheet.absoluteFill} 
+          barcodeScannerSettings={{
+            barcodeTypes: ['qr'], 
+          }}
+          onBarcodeScanned={scanned ? undefined : handleQRScanned}
+        />
+      </View>
+
+      <View className="items-center mt-4">
+        <Text className="text-primary font-roboto-bold text-lg text-center tracking-wide">
+          Escanear Código QR
+        </Text>
+        <Text className="text-white font-roboto-regular text-xs text-center mt-1">
+          Alinea el código dentro del recuadro
+        </Text>
+      </View>
+
+    </View>
+  );
+};
+
+export default ScannerScreen;
