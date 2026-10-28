@@ -6,6 +6,8 @@ import BasicButton from '@/components/shared/BasicButton';
 import BasicTextInput from '@/components/shared/BasicTextInput';
 import SecondaryLink from '@/components/shared/SecondaryLink';
 
+import { connectSocket } from '@/services/socket/socketService';
+
 const HomeScreen = () => {
   const router = useRouter();
   
@@ -13,6 +15,10 @@ const HomeScreen = () => {
   const [code, setCode] = useState('');
   
   const inputRef = useRef<TextInput>(null);
+
+  // useEffect(() => {
+  //   connectSocket('https://servidor-ws-prueba.onrender.com')
+  // }, []);
 
   useEffect(() => {
     if (showInput) {
@@ -36,7 +42,7 @@ const HomeScreen = () => {
             <BasicButton 
               title="Escanear código QR" 
               onPress={() => {
-                router.push('/scanner');
+                router.push('/player'); //Cambiar aqui para pasar al scanner
                 console.log("Escanear código QR");
               }} 
               className="w-full mb-4"

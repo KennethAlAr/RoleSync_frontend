@@ -26,15 +26,21 @@ const PlayerInfoSection = ({name, className, level, avatarImage, ac, initiative,
 				</Text>
 			</View>
 
-      <View className="items-center relative">
-        <View className="w-72 h-72 rounded-full border-0 overflow-hidden shadow-lg">
-          <Image 
-            source={avatarImage}
-            className="w-full h-full"
-            resizeMode="cover"
+      <View className="items-center">
+
+        <View className="relative h-72 w-72">
+          <View className="h-full w-full rounded-full overflow-hidden shadow-lg">
+            <Image 
+              source={avatarImage}
+              className="w-full h-full"
+              resizeMode="cover"
+            />
+          </View>
+          <View
+            className={'absolute right-6 top-6 z-20 h-10 w-10 rounded-full border-2 border-primary bg-green-500'}
           />
         </View>
-
+        
         <AcBadge player_ac={ac} />
       </View>
 

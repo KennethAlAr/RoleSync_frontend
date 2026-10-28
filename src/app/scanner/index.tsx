@@ -22,21 +22,19 @@ const ScannerScreen = () => {
     setScanned(true);
     console.log("Código QR escaneado:", data);
 
-    // Aquí recibes el string del QR (tokens, JSONs, IDs de sesión, etc.)
     Alert.alert(
       'Código QR Escaneado',
       `Contenido:\n\n${data}`,
       [
         {
           text: 'Escanear de nuevo',
-          onPress: () => setScanned(false), // Reactiva la cámara
+          onPress: () => setScanned(false),
         },
         {
           text: 'Aceptar',
           onPress: () => {
-            // Ejemplo: redirigir o guardar datos antes de volver
             router.push({
-              pathname: '/player', // Ajusta '/player' a la ruta de tu archivo en la carpeta app/
+              pathname: '/player',
               params: { qrContent: data }
             });
           },
