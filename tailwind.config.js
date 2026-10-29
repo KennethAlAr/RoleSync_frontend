@@ -25,6 +25,14 @@ module.exports = {
         gradient: {
           100: 'rgba(17, 17, 17, 0.5)',
           200: 'rgba(17, 17, 17, 0.9)'
+        },
+        healthBar: {
+          primary: '#1c4d2a',
+          secondary: '#3aa35c'
+        },
+        tempHealthBar: {
+          primary: '#283c5f',
+          secondary: '#6292e8'
         }
       },
       fontFamily: {

@@ -3,6 +3,8 @@ import { View, Text, TextInput } from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { colors } from '@/constants/theme';
+
 interface StatInputBarProps {
   value: number;
   maxValue?: number;
@@ -19,26 +21,41 @@ const StatInputBar = ({
   innerColor2
 }: StatInputBarProps) => {
   
-	const [textValue, setTextValue] = useState(value.toString());
+  const [textValue, setTextValue] = useState(value.toString());
 
   useEffect(() => {
+    if (parseInt(textValue || '0', 10) === value) return;
     setTextValue(value.toString());
   }, [value]);
 
   const percentage = maxValue ? Math.min(Math.max((value / maxValue) * 100, 0), 100) : 0;
-  const hasValue = maxValue === undefined && value > 0;
+  const isTempHpActive = maxValue === undefined && value > 0;
 
-	const handleTextChange = (val: string) => {
-    setTextValue(val);
-
-    if (val === '' || val === '-') {
+  const handleBlur = () => {
+    if (textValue === '') {
+      setTextValue('0');
       onChangeText(0);
-    } else {
-      const parsed = Number(val);
-      if (!isNaN(parsed)) {
-        onChangeText(parsed);
-      }
     }
+  };
+
+  const handleTextChange = (val: string) => {
+    const cleanText = val.replace(/[^0-9]/g, '');
+
+    if (cleanText === '') {
+      setTextValue('');
+      onChangeText(0);
+      return;
+    }
+
+    let parsed = parseInt(cleanText, 10);
+    if (isNaN(parsed)) parsed = 0;
+
+    if (maxValue !== undefined && parsed > maxValue) {
+      parsed = maxValue;
+    }
+
+    setTextValue(parsed.toString());
+    onChangeText(parsed);
   };
 
   return (
@@ -63,19 +80,34 @@ const StatInputBar = ({
         </View>
       )}
 
-      {hasValue && (
-        <View className="absolute inset-0 overflow-hidden">
-          <LinearGradient
-            colors={[innerColor1, innerColor2]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={{ flex: 1, borderRadius: 10 }}
-          >
-            <View 
-              style={{ borderTopLeftRadius: 10, borderBottomLeftRadius: 10, borderTopRightRadius: 10, borderBottomRightRadius: 10 }} 
-              className="absolute inset-0 border-t-[3px] border-l-[3px] border-white/25 pointer-events-none" 
-            />
-          </LinearGradient>
+      {isTempHpActive && (
+        <View className="absolute inset-0 flex-row gap-1 p-1 overflow-hidden">
+          {value > 20 ? (
+            <View className="flex-1 h-full rounded-md overflow-hidden relative">
+              <LinearGradient
+                colors={[innerColor1, innerColor2]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ flex: 1 }}
+              />
+              <View className="absolute inset-0 border-t-[2px] border-l-[2px] border-white/35 rounded-md pointer-events-none" />
+            </View>
+          ) : (
+            Array.from({ length: value }).map((_, index) => (
+              <View 
+                key={index} 
+                className="flex-1 h-full rounded-md overflow-hidden relative"
+              >
+                <LinearGradient
+                  colors={[innerColor1, innerColor2]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{ flex: 1 }}
+                />
+                <View className="absolute inset-0 border-t-[2px] border-l-[2px] border-white/35 rounded-md pointer-events-none" />
+              </View>
+            ))
+          )}
         </View>
       )}
 
@@ -83,7 +115,10 @@ const StatInputBar = ({
         <TextInput 
           keyboardType="numeric"
           value={textValue}
+          placeholder="0"
+          placeholderTextColor={colors.white}
           onChangeText={handleTextChange}
+          onBlur={handleBlur}
           selectTextOnFocus={true}
           className="text-white font-roboto-bold text-lg text-center p-0"
         />

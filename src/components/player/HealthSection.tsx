@@ -1,30 +1,16 @@
-import { useState } from 'react';
 import { View, Text } from 'react-native';
+
+import { useCharacterStore } from '@/store/characterStore';
+
 import StatCardWrapper from '@/components/player/StatCardWrapper';
 import ActionButton from '@/components/player/ActionButton';
 import StatInputBar from '@/components/player/StatInputBar';
 
-interface HealthSectionProps {
-  maxHp: number;
-}
+import { colors } from '@/constants/theme';
 
-const HealthSection = ({ maxHp }: HealthSectionProps) => {
-  const [hp, setHp] = useState<number>(maxHp);
-  const [tempHp, setTempHp] = useState<number>(0);
-
-  const modifyHp = (amount: number) => {
-    setHp((prev) => {
-      const newHp = prev + amount;
-      return Math.min(Math.max(newHp, 0), maxHp);
-    });
-  };
-
-  const modifyTempHp = (amount: number) => {
-    setTempHp((prev) => {
-      const newTemp = prev + amount;
-      return Math.max(newTemp, 0);
-    });
-  };
+const HealthSection = () => {
+  
+  const {hp, maxHp, tempHp, modifyHp, modifyTempHp, setHp, setTempHp} = useCharacterStore();
 
   return (
     <StatCardWrapper backgroundImage={require('@/assets/images/bg-healing-bar.webp')}>
@@ -48,8 +34,8 @@ const HealthSection = ({ maxHp }: HealthSectionProps) => {
               value={hp}
               maxValue={maxHp}
               onChangeText={(val) => setHp(Math.min(Math.max(val, 0), maxHp))}
-              innerColor2="#3aa35c"
-              innerColor1="#1c4d2a"
+              innerColor1={colors.healthBar.primary}
+              innerColor2={colors.healthBar.secondary}
             />
 
             <ActionButton
@@ -75,8 +61,8 @@ const HealthSection = ({ maxHp }: HealthSectionProps) => {
             <StatInputBar
               value={tempHp}
               onChangeText={(val) => setTempHp(Math.max(val, 0))}
-              innerColor2="#6292e8"
-              innerColor1="#283c5f"
+              innerColor1={colors.tempHealthBar.primary}
+              innerColor2={colors.tempHealthBar.secondary}
             />
 
             <ActionButton

@@ -8,7 +8,7 @@ type ConnectionStatus = 'connected' | 'reconnecting' | 'failed';
 
 const PlayerLayout = () => {
   const [connectionStatus, setConnectionStatus] =
-    useState<ConnectionStatus>('failed');
+    useState<ConnectionStatus>('connected');
 
   const handleCancel = () => {
     setConnectionStatus('connected');

@@ -1,20 +1,13 @@
 import { View, Text, Image } from 'react-native'
 
+import { useCharacterStore } from '@/store/characterStore';
+
 import AcBadge from '@/components/player/AcBadge';
 import CombatStatPill from '@/components/player/CombatStatPill';
 
-interface PlayerInfoSectionProps{
-	name: string;
-	className: string;
-	level: number;
-	avatarImage: any;
-	ac: number;
-	initiative: string;
-	proficiency: string;
-	speed: number;
-}
+const PlayerInfoSection = () => {
+  const {name, className, level, avatarImage, ac, initiative, proficiency, speed} = useCharacterStore();
 
-const PlayerInfoSection = ({name, className, level, avatarImage, ac, initiative, proficiency, speed}: PlayerInfoSectionProps) => {
   return (
 		<View>
 			<View className="items-center mb-2">
@@ -31,7 +24,7 @@ const PlayerInfoSection = ({name, className, level, avatarImage, ac, initiative,
         <View className="relative h-72 w-72">
           <View className="h-full w-full rounded-full overflow-hidden shadow-lg">
             <Image 
-              source={avatarImage}
+              source={typeof avatarImage === 'string' ? { uri: avatarImage } : avatarImage}
               className="w-full h-full"
               resizeMode="cover"
             />

@@ -5,6 +5,7 @@ import { Camera, CameraView } from 'expo-camera';
 import { useRouter } from 'expo-router';
 
 import SecondaryLink from '@/components/shared/SecondaryLink';
+import { socketService } from '@/services/socketService';
 
 const ScannerScreen = () => {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -20,27 +21,48 @@ const ScannerScreen = () => {
   
   const handleQRScanned = ({ data }: { data: string }) => {
     setScanned(true);
-    console.log("Código QR escaneado:", data);
 
-    Alert.alert(
-      'Código QR Escaneado',
-      `Contenido:\n\n${data}`,
-      [
-        {
-          text: 'Escanear de nuevo',
-          onPress: () => setScanned(false),
-        },
-        {
-          text: 'Aceptar',
-          onPress: () => {
-            router.push({
-              pathname: '/player',
-              params: { qrContent: data }
-            });
+    try {
+      const parsedData = JSON.parse(data);
+      const { roomId, characterId } = parsedData;
+
+      if (!roomId || !characterId) {
+        throw new Error('QR incompleto');
+      }
+
+      Alert.alert(
+        'Ficha Encontrada',
+        `¿Deseas conectarte a la sesión?`,
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel',
+            onPress: () => setScanned(false),
           },
-        },
-      ]
-    );
+          {
+            text: 'Conectar',
+            onPress: () => {
+              socketService.connect({ roomId, characterId });
+
+              router.replace('/player');
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.log('Error al procesar el QR:', error);
+
+      Alert.alert(
+        'Código QR no válido',
+        'El código escaneado no pertenece a una sesión válida de Foundry VTT.',
+        [
+          {
+            text: 'Reintentar',
+            onPress: () => setScanned(false),
+          },
+        ]
+      );
+    }
   };
 
   if (hasPermission === null) {
@@ -54,10 +76,10 @@ const ScannerScreen = () => {
           No tenemos acceso a la cámara.{'\n'} Por favor, actívalo en los ajustes.
         </Text>
         <SecondaryLink 
-              title="Volver" 
-              onPress={() => router.back()} 
-              className="text-center"
-            />
+          title="Volver" 
+          onPress={() => router.back()} 
+          className="text-center"
+        />
       </View>
     );
   }
@@ -80,7 +102,7 @@ const ScannerScreen = () => {
           Escanear Código QR
         </Text>
         <Text className="text-white font-roboto-regular text-xs text-center mt-1">
-          Alinea el código dentro del recuadro
+          Alinea el código de tu personaje en Foundry VTT
         </Text>
       </View>
 
