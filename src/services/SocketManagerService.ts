@@ -2,14 +2,17 @@ import { io, Socket } from 'socket.io-client';
 
 const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL;
 
-interface ConnectionParams {
+export interface ConnectionParams {
   roomId: string;
   characterId: string;
 }
 
-class SocketService {
+class SocketManagerService {
   private socket: Socket | null = null;
   private currentSession: ConnectionParams | null = null;
+  
+  // 🛡️ NUEVO: Lista para guardar los "on" que se llamen antes de escanear el QR
+  private pendingListeners: { eventName: string, callback: (data: any) => void }[] = [];
 
   connect({ roomId, characterId }: ConnectionParams, url: string = SOCKET_URL || '') {
     if (this.socket?.connected && this.currentSession?.characterId === characterId) return;
@@ -26,23 +29,17 @@ class SocketService {
       auth: { roomId, characterId },
     });
 
+    // 🛡️ NUEVO: Enchufamos al socket todos los eventos que estaban en la sala de espera
+    this.pendingListeners.forEach(listener => {
+      this.socket?.on(listener.eventName, listener.callback);
+    });
+
+    // Eventos puramente de infraestructura de red
     this.socket.on('connect', () => {
       console.log(`🟢 Conectado a la sala: ${roomId} | Personaje: ${characterId}`);
       
       this.emit('JOIN_ROOM', { roomId, characterId });
       this.emit('REQUEST_CHARACTER_DATA', { roomId, characterId });
-    });
-
-    this.socket.on('CHARACTER_DATA', async (payload) => {
-      console.log('⚡ PAYLOAD RECIBIDO DE FOUNDRY:', payload.savingThrows);
-      const { useCharacterStore } = await import('@/store/characterStore');
-      useCharacterStore.getState().setCharacterData(payload);
-    });
-
-    this.socket.on('CHARACTER_UPDATE', async (payload) => {
-      console.log('🔄 Actualización recibida:', payload);
-      const { useCharacterStore } = await import('@/store/characterStore');
-      useCharacterStore.getState().setCharacterData(payload);
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -62,10 +59,29 @@ class SocketService {
         characterId: this.currentSession?.characterId 
       };
       this.socket.emit(eventName, payload);
-      console.log(`📤 Evento '${eventName}' enviado:`, payload);
+      console.log(`📤 Evento '${eventName}' enviado`);
     } else {
-      console.warn('⚠️ No se pudo enviar el evento: Socket desconectado');
+      console.warn(`⚠️ No se pudo enviar el evento ${eventName}: Socket desconectado`);
     }
+  }
+
+  on(eventName: string, callback: (data: any) => void) {
+    if (!this.socket) {
+      // 🛡️ En vez de ignorar la escucha, la guardamos en la lista para cuando haya socket
+      console.log(`⏳ Guardando listener para '${eventName}' (esperando QR...)`);
+      this.pendingListeners.push({ eventName, callback });
+      return;
+    }
+    // Si ya había socket, lo enchufamos directo
+    this.socket.on(eventName, callback);
+  }
+
+  off(eventName: string, callback?: (data: any) => void) {
+    if (this.socket) {
+      this.socket.off(eventName, callback);
+    }
+    // También lo quitamos de pendientes por si acaso
+    this.pendingListeners = this.pendingListeners.filter(l => l.eventName !== eventName);
   }
 
   disconnect() {
@@ -75,6 +91,10 @@ class SocketService {
       this.currentSession = null;
     }
   }
+
+  getSession() {
+    return this.currentSession;
+  }
 }
 
-export const socketService = new SocketService();
+export const socketManager = new SocketManagerService();

@@ -4,6 +4,10 @@ import { useFonts } from 'expo-font';
 import { Slot, SplashScreen } from 'expo-router';
 
 import AppBackground from '@/components/shared/AppBackground';
+import { playerInfoService } from '@/services/PlayerInfoService';
+import { healthInfoService } from '@/services/HealthInfoService';
+import { savingThrowsService } from '@/services/SavingThrowsService';
+
 import '../global.css';
 
 const RootLayout = () => {
@@ -19,6 +23,14 @@ const RootLayout = () => {
     if(error) throw error;
     if(fontsLoaded) SplashScreen.hideAsync();
   }, [fontsLoaded, error]);
+
+  useEffect(() => {
+    console.log("Inicializando servicios de dominio...");
+    
+    playerInfoService.initialize();
+    healthInfoService.initialize();
+    savingThrowsService.initialize();    
+  }, []);
 
   if(!fontsLoaded && !error) return null;
 

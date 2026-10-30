@@ -33,7 +33,8 @@ module.exports = {
         tempHealthBar: {
           primary: '#283c5f',
           secondary: '#6292e8'
-        }
+        },
+        glow: '#ffffff'
       },
       fontFamily: {
         'roboto-regular': ['RobotoSlab-Regular', 'sans-serif'],

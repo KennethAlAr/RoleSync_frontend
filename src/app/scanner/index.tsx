@@ -5,7 +5,7 @@ import { Camera, CameraView } from 'expo-camera';
 import { useRouter } from 'expo-router';
 
 import SecondaryLink from '@/components/shared/SecondaryLink';
-import { socketService } from '@/services/socketService';
+import { socketManager } from '@/services/SocketManagerService';
 
 const ScannerScreen = () => {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -42,8 +42,7 @@ const ScannerScreen = () => {
           {
             text: 'Conectar',
             onPress: () => {
-              socketService.connect({ roomId, characterId });
-
+              socketManager.connect({ roomId, characterId });
               router.replace('/player');
             },
           },

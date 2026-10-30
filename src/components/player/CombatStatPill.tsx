@@ -1,7 +1,8 @@
+import React from 'react';
 import { View, Text, Image } from 'react-native'
 
 interface CombatStatPillProps {
-  statNumber: string;
+  statNumber: string | React.ReactNode;
   statName: string;
 }
 
