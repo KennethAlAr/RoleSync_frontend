@@ -5,6 +5,7 @@ const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL;
 export interface ConnectionParams {
   roomId: string;
   characterId: string;
+  userId: string;
 }
 
 class SocketManagerService {
@@ -14,14 +15,14 @@ class SocketManagerService {
   // 🛡️ NUEVO: Lista para guardar los "on" que se llamen antes de escanear el QR
   private pendingListeners: { eventName: string, callback: (data: any) => void }[] = [];
 
-  connect({ roomId, characterId }: ConnectionParams, url: string = SOCKET_URL || '') {
+  connect({ roomId, characterId, userId }: ConnectionParams, url: string = SOCKET_URL || '') {
     if (this.socket?.connected && this.currentSession?.characterId === characterId) return;
 
     if (this.socket) {
       this.disconnect();
     }
 
-    this.currentSession = { roomId, characterId };
+    this.currentSession = { roomId, characterId, userId };
 
     this.socket = io(url, {
       transports: ['websocket'],
@@ -38,7 +39,7 @@ class SocketManagerService {
     this.socket.on('connect', () => {
       console.log(`🟢 Conectado a la sala: ${roomId} | Personaje: ${characterId}`);
       
-      this.emit('JOIN_ROOM', { roomId, characterId });
+      this.emit('JOIN_ROOM', { roomId, characterId, userId });
       this.emit('REQUEST_CHARACTER_DATA', { roomId, characterId });
     });
 
@@ -56,7 +57,8 @@ class SocketManagerService {
       const payload = { 
         ...data, 
         roomId: this.currentSession?.roomId,
-        characterId: this.currentSession?.characterId 
+        characterId: this.currentSession?.characterId,
+        userId: this.currentSession?.userId
       };
       this.socket.emit(eventName, payload);
       console.log(`📤 Evento '${eventName}' enviado`);

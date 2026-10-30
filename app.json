@@ -8,7 +8,8 @@
     "scheme": "rolesyncapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/logo-blanco.png"
+      "icon": "./assets/logo-blanco.png",
+      "bundleIdentifier": "com.anonymous.rolesyncapp"
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +25,7 @@
       "bundler": "metro"
     },
     "splash": {
-      "image": "./assets/images/logo-blanco.png",
+      "image": "./assets/images/logo-splash-screen.png",
       "resizeMode": "contain",
       "backgroundColor": "#1c1c1c"
     },
@@ -34,7 +35,11 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#1c1c1c",
-          "image": "./assets/images/logo-negro.png",
+          "image": "./assets/images/logo-splash-screen.png",
+          "dark": {
+            "backgroundColor": "#1c1c1c",
+            "image": "./assets/images/logo-splash-screen.png"
+          },
           "imageWidth": 200
         }
       ],
@@ -50,6 +55,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6a8996e6-d11b-492e-8152-16936bc5595f"
+      }
     }
   }
 }

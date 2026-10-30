@@ -5,7 +5,6 @@ class PlayerInfoService {
   initialize() {
     socketManager.on('PLAYER_INFO', (payload) => {
       useCharacterStore.getState().setPlayerInfo({
-        characterId: payload.characterId,
         name: payload.name,
         className: payload.className,
         level: payload.level,
@@ -30,10 +29,15 @@ class PlayerInfoService {
     });
 
     socketManager.on('COMBAT_STATE_UPDATE', (payload) => {
-      const currentInfo = useCharacterStore.getState().playerInfo;
-      if (currentInfo && currentInfo.characterId === payload.characterId) {
+      const { playerInfo, userInfo } = useCharacterStore.getState();
+
+      // Si no hay datos del jugador o no hemos escaneado el QR aún, salimos
+      if (!playerInfo || !userInfo) return;
+
+      // Como hemos pasado el filtro anterior, TypeScript ya sabe que userInfo NO es null
+      if (userInfo.characterId === payload.characterId) {
         useCharacterStore.getState().setPlayerInfo({
-          ...currentInfo,
+          ...playerInfo,
           inCombat: payload.inCombat
         });
       }
@@ -41,7 +45,14 @@ class PlayerInfoService {
   }
 
   rollInitiative() {
-    socketManager.emit('ROLL_INITIATIVE');
+    const userInfo = useCharacterStore.getState().userInfo;
+    if (!userInfo) return;
+
+    socketManager.emit('ROLL_INITIATIVE', {
+      roomId: userInfo.roomId,
+      characterId: userInfo.characterId,
+      userId: userInfo.userId 
+    });
   }
 }
 

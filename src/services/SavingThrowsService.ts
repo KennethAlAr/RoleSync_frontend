@@ -12,8 +12,9 @@ class SavingThrowsService {
 
   // Método para que la UI solicite una tirada al pulsar sobre una característica
   rollSavingThrow(abilityName: string) {
-    const playerInfo = useCharacterStore.getState().playerInfo;
-    if (!playerInfo) return;
+    const userInfo = useCharacterStore.getState().userInfo;
+    console.log("Estado de userInfo:", userInfo);
+    if (!userInfo) return;
 
     // Mapa inverso para enviar a Foundry la clave interna que espera
     const reverseMap: Record<string, string> = {
@@ -23,10 +24,13 @@ class SavingThrowsService {
     
     const abilityKey = reverseMap[abilityName] || abilityName.toLowerCase();
 
+    console.log("hola")
+
     socketManager.emit('ROLL_SAVING_THROW', { 
       roomId: 'sala_de_prueba', // o pasarlo desde tu constante
-      characterId: playerInfo.characterId,
-      ability: abilityKey 
+      characterId: userInfo.characterId,
+      ability: abilityKey,
+      userId: userInfo.userId,
     });
   }
 }

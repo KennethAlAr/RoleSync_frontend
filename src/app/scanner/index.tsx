@@ -7,6 +7,8 @@ import { useRouter } from 'expo-router';
 import SecondaryLink from '@/components/shared/SecondaryLink';
 import { socketManager } from '@/services/SocketManagerService';
 
+import { useCharacterStore } from '@/store/characterStore';
+
 const ScannerScreen = () => {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
@@ -24,9 +26,9 @@ const ScannerScreen = () => {
 
     try {
       const parsedData = JSON.parse(data);
-      const { roomId, characterId } = parsedData;
+      const { roomId, characterId, userId } = parsedData;
 
-      if (!roomId || !characterId) {
+      if (!roomId || !characterId || !userId) {
         throw new Error('QR incompleto');
       }
 
@@ -42,7 +44,12 @@ const ScannerScreen = () => {
           {
             text: 'Conectar',
             onPress: () => {
-              socketManager.connect({ roomId, characterId });
+              useCharacterStore.getState().setUserInfo({
+                roomId,
+                characterId,
+                userId
+              });
+              socketManager.connect({ roomId, characterId, userId });
               router.replace('/player');
             },
           },
