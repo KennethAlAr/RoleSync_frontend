@@ -36,13 +36,13 @@ const PlayerLayout = () => {
     });
 
     await socketManager.logout();
-    router.replace('/scanner');
+    router.replace('/home');
   };
 
   const handleCancelOverlay = () => {
     setStatus('connected');
     socketManager.disconnect();
-    router.replace('/scanner');
+    router.replace('/home');
   };
 
   const handleRetryOverlay = async () => {
