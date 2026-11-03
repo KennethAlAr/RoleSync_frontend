@@ -4,14 +4,26 @@ import { TextInput, View } from 'react-native';
 
 import BasicButton from '@/components/shared/BasicButton';
 import BasicTextInput from '@/components/shared/BasicTextInput';
+import CustomAlert from '@/components/shared/CustomAlert';
 import SecondaryLink from '@/components/shared/SecondaryLink';
+
+import { socketManager } from '@/services/SocketManagerService';
+import { useCharacterStore } from '@/store/characterStore';
 
 const HomeScreen = () => {
   const router = useRouter();
   
   const [showInput, setShowInput] = useState(false);
   const [code, setCode] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
   
+  // Estado para controlar el CustomAlert
+  const [alertConfig, setAlertConfig] = useState({
+    visible: false,
+    title: '',
+    message: '',
+  });
+
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -20,11 +32,52 @@ const HomeScreen = () => {
     }
   }, [showInput]);
 
-  const handleSendCode = () => {
-    if (!code.trim()) return;
-    console.log("Enviando código manual:", code);
-    setCode('');
-    setShowInput(false);
+  const closeAlert = () => setAlertConfig((prev) => ({ ...prev, visible: false }));
+
+  const handleSendCode = async () => {
+    const otp = code.trim();
+    if (!otp) return;
+
+    if (!/^\d{6}$/.test(otp)) {
+      setAlertConfig({
+        visible: true,
+        title: 'Código no válido',
+        message: 'El código debe estar compuesto por exactamente 6 números.',
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      const response = await socketManager.connectWithOtp(otp);
+
+      if (response.success && response.worldId && response.characterId) {
+        useCharacterStore.getState().setUserInfo({
+          worldId: response.worldId,
+          characterId: response.characterId,
+        });
+
+        setCode('');
+        setShowInput(false);
+        router.replace('/player');
+      } else {
+        setAlertConfig({
+          visible: true,
+          title: 'Fallo de conexión',
+          message: response.error || 'Código caducado o incorrecto.',
+        });
+      }
+    } catch (error: any) {
+      console.error('Error enviando código manual:', error);
+      setAlertConfig({
+        visible: true,
+        title: 'Excepción detectada',
+        message: error?.message || JSON.stringify(error),
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -35,18 +88,13 @@ const HomeScreen = () => {
           <View className="w-full items-center">
             <BasicButton 
               title="Escanear código QR" 
-              onPress={() => {
-                router.push('/scanner');
-                console.log("Escanear código QR");
-              }} 
+              onPress={() => router.push('/scanner')} 
               className="w-full mb-4"
             />
 
             <SecondaryLink 
               title="Insertar código manualmente" 
-              onPress={() => {
-                setShowInput(true);
-              }} 
+              onPress={() => setShowInput(true)} 
             />
           </View>
         ) : (
@@ -55,19 +103,23 @@ const HomeScreen = () => {
               ref={inputRef}
               value={code}
               onChangeText={setCode}
-              placeholder="Introduce el código..."
+              placeholder="Introduce el código de 6 dígitos"
               onSubmitEditing={handleSendCode}
+              keyboardType="number-pad"
+              editable={!isProcessing}
             />
 
             <BasicButton 
-              title="Enviar código" 
+              title={isProcessing ? "Conectando..." : "Enviar código"} 
               onPress={handleSendCode} 
+              disabled={isProcessing}
               className="w-full mb-3"
             />
 
             <SecondaryLink 
               title="Cancelar" 
               onPress={() => {
+                if (isProcessing) return;
                 setShowInput(false);
                 setCode('');
               }} 
@@ -77,6 +129,14 @@ const HomeScreen = () => {
         )}
 
       </View>
+
+      {/* Insertamos el CustomAlert al final del componente */}
+      <CustomAlert 
+        visible={alertConfig.visible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onConfirm={closeAlert}
+      />
     </View>
   );
 }

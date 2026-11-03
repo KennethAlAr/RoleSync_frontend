@@ -1,9 +1,8 @@
 import { create } from 'zustand';
 
 export interface UserInfo {
-  roomId: string;
+  worldId: string;
   characterId: string;
-  userId: string;
 }
 
 export interface PlayerInfo {

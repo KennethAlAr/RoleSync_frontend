@@ -1,92 +1,196 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL;
+import { useConnectionStore } from '@/store/connectionStore';
 
-export interface ConnectionParams {
-  roomId: string;
+// URL por defecto en Render si no se define en las variables de entorno
+const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'https://rolesync-server.onrender.com';
+
+// Claves de almacenamiento persistente independientes
+const WORLD_ID_KEY = 'roleSyncWorldId';
+const CHARACTER_ID_KEY = 'roleSyncCharacterId';
+const TOKEN_KEY = 'roleSyncToken';
+
+export interface SessionData {
+  worldId: string;
   characterId: string;
-  userId: string;
+  token: string;
 }
 
 class SocketManagerService {
   private socket: Socket | null = null;
-  private currentSession: ConnectionParams | null = null;
-  
-  // 🛡️ NUEVO: Lista para guardar los "on" que se llamen antes de escanear el QR
-  private pendingListeners: { eventName: string, callback: (data: any) => void }[] = [];
+  private currentSession: SessionData | null = null;
+  private pendingListeners: { eventName: string; callback: (data: any) => void }[] = [];
 
-  connect({ roomId, characterId, userId }: ConnectionParams, url: string = SOCKET_URL || '') {
-    if (this.socket?.connected && this.currentSession?.characterId === characterId) return;
+  public isConnected(): boolean {
+    return !!this.socket && this.socket.connected;
+  }
 
+  /**
+   * Limpia las 3 claves guardadas en AsyncStorage
+   */
+  private async clearStorageSession(): Promise<void> {
+    await Promise.all([
+      AsyncStorage.removeItem(WORLD_ID_KEY),
+      AsyncStorage.removeItem(CHARACTER_ID_KEY),
+      AsyncStorage.removeItem(TOKEN_KEY),
+    ]);
+  }
+
+  /**
+   * 1. Conexión inicial canjeando el código OTP escaneado del QR
+   */
+  public async connectWithOtp(
+    otp: string,
+    serverUrl: string = SOCKET_URL
+  ): Promise<{ success: boolean; worldId?: string; characterId?: string; error?: string }> {
     if (this.socket) {
       this.disconnect();
     }
 
-    this.currentSession = { roomId, characterId, userId };
+    return new Promise((resolve) => {
+      this.socket = io(serverUrl, {
+        transports: ['websocket'],
+        autoConnect: true,
+      });
 
-    this.socket = io(url, {
-      transports: ['websocket'],
-      autoConnect: true,
-      auth: { roomId, characterId },
-    });
+      this.socket.on('connect', () => {
+        console.log(`🔌 Conectado al servidor (${this.socket?.id}). Canjeando OTP: ${otp}...`);
 
-    // 🛡️ NUEVO: Enchufamos al socket todos los eventos que estaban en la sala de espera
-    this.pendingListeners.forEach(listener => {
-      this.socket?.on(listener.eventName, listener.callback);
-    });
+        this.socket?.emit('REDEEM_OTP', { otp }, async (res: any) => {
+          if (res && res.success) {
+            // Guardamos los 3 datos en AsyncStorage
+            await Promise.all([
+              AsyncStorage.setItem(WORLD_ID_KEY, res.worldId),
+              AsyncStorage.setItem(CHARACTER_ID_KEY, res.characterId),
+              AsyncStorage.setItem(TOKEN_KEY, res.token),
+            ]);
 
-    // Eventos puramente de infraestructura de red
-    this.socket.on('connect', () => {
-      console.log(`🟢 Conectado a la sala: ${roomId} | Personaje: ${characterId}`);
-      
-      this.emit('JOIN_ROOM', { roomId, characterId, userId });
-      this.emit('REQUEST_CHARACTER_DATA', { roomId, characterId });
-    });
+            console.log('✅ OTP canjeado con éxito. Validando sesión con token...');
 
-    this.socket.on('disconnect', (reason) => {
-      console.log('⚪ Desconectado:', reason);
-    });
+            // Delegamos toda la inicialización y validación a connectWithToken
+            const authenticated = await this.connectWithToken(serverUrl);
 
-    this.socket.on('connect_error', (error) => {
-      console.error('🔴 Error Socket.io:', error.message);
+            if (authenticated) {
+              resolve({ success: true, worldId: res.worldId, characterId: res.characterId });
+            } else {
+              resolve({ success: false, error: 'Foundry rechazó la validación del token.' });
+            }
+          } else {
+            console.warn('🔴 Fallo de autenticación por OTP:', res?.error);
+            this.disconnect();
+            resolve({ success: false, error: res?.error || 'Código OTP inválido o expirado.' });
+          }
+        });
+      });
+
+      this.socket.on('connect_error', (error) => {
+        console.error('🔴 Error de conexión WebSocket:', error.message);
+        resolve({ success: false, error: 'No se pudo conectar con el servidor.' });
+      });
     });
   }
 
-  emit(eventName: string, data: any = {}) {
-    if (this.socket && this.socket.connected) {
-      const payload = { 
-        ...data, 
-        roomId: this.currentSession?.roomId,
-        characterId: this.currentSession?.characterId,
-        userId: this.currentSession?.userId
+  /**
+   * 2. Único punto de inicio de sesión: valida credenciales con Foundry e inicializa listeners
+   */
+  public async connectWithToken(serverUrl: string = SOCKET_URL): Promise<boolean> {
+    const [worldId, characterId, token] = await Promise.all([
+      AsyncStorage.getItem(WORLD_ID_KEY),
+      AsyncStorage.getItem(CHARACTER_ID_KEY),
+      AsyncStorage.getItem(TOKEN_KEY),
+    ]);
+
+    if (!worldId || !characterId || !token) {
+      await this.clearStorageSession();
+      return false;
+    }
+
+    if (this.socket?.connected && this.currentSession) return true;
+
+    // Si no hay socket activo, lo creamos
+    if (!this.socket || !this.socket.connected) {
+      this.socket = io(serverUrl, {
+        transports: ['websocket'],
+        autoConnect: true,
+      });
+    }
+
+    return new Promise((resolve) => {
+      const authenticate = () => {
+        console.log('🔌 Autenticando con credenciales en la sala...');
+
+        this.socket?.emit(
+          'AUTHENTICATE_WITH_TOKEN',
+          { token, worldId, characterId },
+          async (res: any) => {
+            if (res && res.success) {
+              this.currentSession = { worldId, characterId, token };
+
+              this.attachPendingListeners();
+              this.setupDefaultEvents();
+
+              // Pedimos los datos del personaje a Foundry
+              this.emit('REQUEST_CHARACTER_DATA', { characterId });
+
+              console.log(`✅ Sesión validada | Mundo: ${worldId} | Personaje: ${characterId}`);
+              resolve(true);
+            } else {
+              console.warn('🔴 Credenciales rechazadas por Foundry. Limpiando almacenamiento...');
+              await this.clearStorageSession();
+              this.disconnect();
+              resolve(false);
+            }
+          }
+        );
       };
-      this.socket.emit(eventName, payload);
+
+      if (this.socket?.connected) {
+        authenticate();
+      } else {
+        this.socket?.once('connect', authenticate);
+        this.socket?.once('connect_error', () => resolve(false));
+      }
+    });
+  }
+
+  /**
+   * Emite eventos al servidor verificando previamente el estado de la conexión
+   */
+  public emit(eventName: string, data: any = {}) {
+    if (this.socket && this.socket.connected) {
+      this.socket.emit(eventName, data);
       console.log(`📤 Evento '${eventName}' enviado`);
     } else {
-      console.warn(`⚠️ No se pudo enviar el evento ${eventName}: Socket desconectado`);
+      console.warn(`⚠️ No se pudo enviar '${eventName}': Socket desconectado`);
     }
   }
 
-  on(eventName: string, callback: (data: any) => void) {
+  /**
+   * Registra un listener de eventos
+   */
+  public on(eventName: string, callback: (data: any) => void) {
     if (!this.socket) {
-      // 🛡️ En vez de ignorar la escucha, la guardamos en la lista para cuando haya socket
-      console.log(`⏳ Guardando listener para '${eventName}' (esperando QR...)`);
       this.pendingListeners.push({ eventName, callback });
       return;
     }
-    // Si ya había socket, lo enchufamos directo
     this.socket.on(eventName, callback);
   }
 
-  off(eventName: string, callback?: (data: any) => void) {
+  /**
+   * Remueve un listener registrado
+   */
+  public off(eventName: string, callback?: (data: any) => void) {
     if (this.socket) {
       this.socket.off(eventName, callback);
     }
-    // También lo quitamos de pendientes por si acaso
-    this.pendingListeners = this.pendingListeners.filter(l => l.eventName !== eventName);
+    this.pendingListeners = this.pendingListeners.filter((l) => l.eventName !== eventName);
   }
 
-  disconnect() {
+  /**
+   * Cierra el canal WebSocket y limpia la sesión activa en memoria RAM
+   */
+  public disconnect() {
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
@@ -94,8 +198,47 @@ class SocketManagerService {
     }
   }
 
-  getSession() {
+  /**
+   * Cierra sesión completamente: borra los 3 datos del almacenamiento y corta la conexión
+   */
+  public async logout() {
+    await this.clearStorageSession();
+    this.disconnect();
+    useConnectionStore.getState().setStatus('connected');
+  }
+
+  public getSession(): SessionData | null {
     return this.currentSession;
+  }
+
+  private attachPendingListeners() {
+    if (!this.socket) return;
+    this.pendingListeners.forEach((listener) => {
+      this.socket?.on(listener.eventName, listener.callback);
+    });
+  }
+
+  private setupDefaultEvents() {
+    if (!this.socket) return;
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('⚪ Desconectado:', reason);
+      if (reason !== 'io client disconnect') {
+        useConnectionStore.getState().setStatus('reconnecting');
+      }
+    });
+
+    this.socket.on('connect', () => {
+      console.log('🟢 WebSocket conectado/restablecido');
+      useConnectionStore.getState().setStatus('connected');
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error('🔴 Error Socket.io:', error.message);
+      if (!this.socket?.connected) {
+        useConnectionStore.getState().setStatus('failed');
+      }
+    });
   }
 }
 

@@ -1,35 +1,84 @@
-import { useState } from 'react';
-import { View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { BackHandler, View } from 'react-native';
 import { router, Slot } from 'expo-router';
 
 import ConnectionOverlay from '@/components/connection/ConnectionOverlay';
-
-type ConnectionStatus = 'connected' | 'reconnecting' | 'failed';
+import CustomAlert from '@/components/shared/CustomAlert';
+import { socketManager } from '@/services/SocketManagerService';
+import { useCharacterStore } from '@/store/characterStore';
+import { useConnectionStore } from '@/store/connectionStore';
 
 const PlayerLayout = () => {
-  const [connectionStatus, setConnectionStatus] =
-    useState<ConnectionStatus>('connected');
+  const { status, setStatus } = useConnectionStore();
+  const [showLogoutAlert, setShowLogoutAlert] = useState(false);
 
-  const handleCancel = () => {
-    setConnectionStatus('connected');
-    router.replace('/');
+  // Interceptamos el botón físico de "atrás" en Android/gesto para pedir confirmación
+  useEffect(() => {
+    const onBackPress = () => {
+      setShowLogoutAlert(true);
+      return true; // Previene la navegación por defecto
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress
+    );
+
+    return () => backHandler.remove();
+  }, []);
+
+  const handleConfirmLogout = async () => {
+    setShowLogoutAlert(false);
+
+    useCharacterStore.getState().setUserInfo({
+      worldId: '',
+      characterId: '',
+    });
+
+    await socketManager.logout();
+    router.replace('/scanner');
   };
 
-  const handleRetry = () => {
-    setConnectionStatus('reconnecting');
+  const handleCancelOverlay = () => {
+    setStatus('connected');
+    socketManager.disconnect();
+    router.replace('/scanner');
+  };
+
+  const handleRetryOverlay = async () => {
+    setStatus('reconnecting');
+    const reconnected = await socketManager.connectWithToken();
+
+    if (reconnected) {
+      setStatus('connected');
+    } else {
+      setStatus('failed');
+    }
   };
 
   return (
     <View className="flex-1">
       <Slot />
 
-      {connectionStatus !== 'connected' && (
+      {/* Overlay de reconexión por pérdida de red */}
+      {status !== 'connected' && (
         <ConnectionOverlay
-          connectionStatus={connectionStatus}
-          onCancel={handleCancel}
-          onRetry={handleRetry}
+          connectionStatus={status}
+          onCancel={handleCancelOverlay}
+          onRetry={handleRetryOverlay}
         />
       )}
+
+      {/* Alerta de confirmación al intentar salir */}
+      <CustomAlert
+        visible={showLogoutAlert}
+        title="Desvincular personaje"
+        message="¿Estás seguro de que quieres salir? Tendrás que volver a escanear el código QR para entrar."
+        confirmText="Desvincular"
+        cancelText="Cancelar"
+        onConfirm={handleConfirmLogout}
+        onCancel={() => setShowLogoutAlert(false)}
+      />
     </View>
   );
 };
