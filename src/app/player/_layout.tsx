@@ -35,7 +35,13 @@ const PlayerLayout = () => {
       characterId: '',
     });
 
+    // 1. Borramos los datos del almacenamiento y cerramos socket
     await socketManager.logout();
+
+    // 2. FUNDAMENTAL: Avisamos al estado global de que estamos fuera
+    useConnectionStore.getState().setAuthStatus('unauthenticated');
+
+    // 3. Redirigimos a la raíz (cambia '/' por '/home' si tu archivo se llama home.tsx)
     router.replace('/home');
   };
 

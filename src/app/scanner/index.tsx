@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Camera, CameraView } from 'expo-camera';
 import { useRouter } from 'expo-router';
 
+import { useConnectionStore } from '@/store/connectionStore';
 import CustomAlert from '@/components/shared/CustomAlert';
 import SecondaryLink from '@/components/shared/SecondaryLink';
 import { socketManager } from '@/services/SocketManagerService';
@@ -81,6 +82,9 @@ const ScannerScreen = () => {
               worldId: response.worldId,
               characterId: response.characterId,
             });
+            
+            // LA CLAVE: Avisamos al estado global antes de hacer la redirección
+            useConnectionStore.getState().setAuthStatus('authenticated');
             
             setAlertConfig((prev) => ({ ...prev, visible: false }));
             router.replace('/player');

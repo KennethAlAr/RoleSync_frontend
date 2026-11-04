@@ -9,6 +9,7 @@ import SecondaryLink from '@/components/shared/SecondaryLink';
 
 import { socketManager } from '@/services/SocketManagerService';
 import { useCharacterStore } from '@/store/characterStore';
+import { useConnectionStore } from '@/store/connectionStore';
 
 const HomeScreen = () => {
   const router = useRouter();
@@ -57,6 +58,8 @@ const HomeScreen = () => {
           worldId: response.worldId,
           characterId: response.characterId,
         });
+
+        useConnectionStore.getState().setAuthStatus('authenticated');
 
         setCode('');
         setShowInput(false);

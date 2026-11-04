@@ -12,7 +12,7 @@ const PlayerScreen = () => {
       <PlayerHeader />
 
       {/* Contenido con scroll (añadimos pt-16 para que la X no tape el contenido del principio) */}
-      <ScrollView className="flex-1 px-4 pt-16 pb-6">
+      <ScrollView className="flex-1 px-4 pt-12 pb-24" showsVerticalScrollIndicator={false}>
         <PlayerInfoSection />
         <HealthSection />      
         <SavingThrowsSection />

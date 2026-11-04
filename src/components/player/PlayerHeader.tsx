@@ -6,6 +6,9 @@ import { useRouter } from 'expo-router';
 import CustomAlert from '@/components/shared/CustomAlert';
 import { socketManager } from '@/services/SocketManagerService';
 import { useCharacterStore } from '@/store/characterStore';
+import { useConnectionStore } from '@/store/connectionStore'; 
+
+import { colors } from '@/constants/theme';
 
 const PlayerHeader = () => {
   const router = useRouter();
@@ -22,17 +25,22 @@ const PlayerHeader = () => {
 
     // Borramos el token y cerramos socket
     await socketManager.logout();
-    router.replace('/scanner');
+
+    // FUNDAMENTAL: Avisamos al estado global
+    useConnectionStore.getState().setAuthStatus('unauthenticated');
+
+    // Redirigimos a la raíz (o '/home' dependiendo de cómo se llame tu archivo inicial)
+    router.replace('/');
   };
 
   return (
-    <View className="absolute top-4 left-4 z-50">
+    <View className="absolute top-4 left-4 z-50 mt-10">
       <Pressable
         onPress={() => setShowLogoutAlert(true)}
         className="p-2 rounded-xl bg-background/80 border border-primary/30 active:opacity-70 shadow-md"
         accessibilityLabel="Desvincular personaje"
       >
-        <Ionicons name="close" size={24} color="#C2B280" /> 
+        <Ionicons name="close" size={24} color={colors.primary} /> 
         {/* Cambia el color por el tono exacto de tu primary si difiere */}
       </Pressable>
 

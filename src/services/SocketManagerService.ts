@@ -202,6 +202,14 @@ class SocketManagerService {
    * Cierra sesión completamente: borra los 3 datos del almacenamiento y corta la conexión
    */
   public async logout() {
+    if (this.currentSession) {
+      this.emit('REVOKE_TOKEN', {
+        worldId: this.currentSession.worldId,
+        characterId: this.currentSession.characterId,
+        token: this.currentSession.token
+      });
+    }
+
     await this.clearStorageSession();
     this.disconnect();
     useConnectionStore.getState().setStatus('connected');

@@ -1,16 +1,19 @@
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen } from 'expo-router';
 
 import { socketManager } from '@/services/SocketManagerService';
 import { useCharacterStore } from '@/store/characterStore';
+import { useConnectionStore } from '@/store/connectionStore';
 
 export const useSessionManager = (isAppReady: boolean) => {
-  const router = useRouter();
   const appState = useRef(AppState.currentState);
+  
+  // Usamos el estado global en lugar de un useState local
+  const authStatus = useConnectionStore((state) => state.authStatus);
+  const setAuthStatus = useConnectionStore((state) => state.setAuthStatus);
 
   useEffect(() => {
-    // Solo intentamos conectar cuando las fuentes y servicios locales están listos
     if (!isAppReady) return;
 
     async function initSession() {
@@ -24,40 +27,29 @@ export const useSessionManager = (isAppReady: boolean) => {
             characterId: session.characterId,
           });
         }
-        router.replace('/player');
+        setAuthStatus('authenticated');
       } else {
-        router.replace('/scanner');
+        setAuthStatus('unauthenticated');
       }
-
-      // Ocultamos la SplashScreen cuando el flujo de auth ha terminado
       await SplashScreen.hideAsync();
     }
 
     initSession();
 
-    // Control de segundo plano (Background -> Active)
     const subscription = AppState.addEventListener('change', async (nextAppState: AppStateStatus) => {
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === 'active'
-      ) {
-        console.log('📱 App volvió al primer plano. Comprobando socket...');
-
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
         if (!socketManager.isConnected()) {
-          console.log('🔄 Socket desconectado. Reintentando con token...');
           const reconnected = await socketManager.connectWithToken();
-
           if (!reconnected) {
-            router.replace('/scanner');
+            setAuthStatus('unauthenticated');
           }
         }
       }
-
       appState.current = nextAppState;
     });
 
-    return () => {
-      subscription.remove();
-    };
+    return () => subscription.remove();
   }, [isAppReady]);
+
+  return authStatus;
 };
