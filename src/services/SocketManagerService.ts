@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io, Socket } from 'socket.io-client';
+import { AppState } from 'react-native';
 
 import { useConnectionStore } from '@/store/connectionStore';
 
@@ -21,6 +22,27 @@ class SocketManagerService {
   private socket: Socket | null = null;
   private currentSession: SessionData | null = null;
   private pendingListeners: { eventName: string; callback: (data: any) => void }[] = [];
+
+  constructor() {
+    AppState.addEventListener('change', (nextAppState) => {
+      // Si la app vuelve de estar minimizada o bloqueada...
+      if (nextAppState === 'active') {
+        console.log('📱 App vuelve a primer plano. Aplicando borrón y cuenta nueva...');
+        
+        // 1. Borramos la memoria
+        this.currentSession = null;
+        
+        // 2. Asesinamos al socket viejo por si se quedó colgado en el limbo
+        if (this.socket) {
+          this.socket.disconnect();
+          this.socket = null;
+        }
+
+        // 3. Reutilizamos el método que ya hace la magia desde cero
+        this.connectWithToken();
+      }
+    });
+  }
 
   public isConnected(): boolean {
     return !!this.socket && this.socket.connected;
