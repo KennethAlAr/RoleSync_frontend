@@ -3,6 +3,7 @@ import { View, Text, Image, ActivityIndicator, TouchableOpacity, Animated } from
 import { FontAwesome6 } from '@expo/vector-icons';
 
 import { useCharacterStore } from '@/store/characterStore';
+import { useConnectionStore } from '@/store/connectionStore';
 import { playerInfoService } from '@/services/PlayerInfoService';
 
 import AcBadge from '@/components/player/AcBadge';
@@ -12,6 +13,7 @@ import { colors } from '@/constants/theme';
 
 const PlayerInfoSection = () => {
   const playerInfo = useCharacterStore((state) => state.playerInfo);
+  const { status, isFoundryOnline } = useConnectionStore();
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -58,6 +60,16 @@ const PlayerInfoSection = () => {
       })
     : 1; // Normal por defecto
 
+  let statusColor = "bg-green-500";
+
+  if (status !== 'connected') {
+    // Si el MÓVIL pierde la conexión o está reconectando -> ROJO
+    statusColor = "bg-red-500";
+  } else if (!isFoundryOnline) {
+    // Si el móvil está bien pero FOUNDRY se ha caído -> NARANJA
+    statusColor = "bg-orange-500";
+  }
+
   return (
     <View>
       <View className="items-center mb-2">
@@ -82,7 +94,7 @@ const PlayerInfoSection = () => {
               resizeMode="cover"
             />
           </View>
-          <View className="absolute right-6 top-6 z-20 h-10 w-10 rounded-full border-2 border-primary bg-green-500" />
+          <View className={`absolute right-6 top-6 z-20 h-10 w-10 rounded-full border-2 border-primary ${statusColor}`} />
         </View>
         <AcBadge player_ac={ac} />
       </View>
