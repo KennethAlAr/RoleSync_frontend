@@ -40,8 +40,7 @@ const PlayerHeader = () => {
         className="p-2 rounded-xl bg-background/80 border border-primary/30 active:opacity-70 shadow-md"
         accessibilityLabel="Desvincular personaje"
       >
-        <Ionicons name="close" size={24} color={colors.primary} /> 
-        {/* Cambia el color por el tono exacto de tu primary si difiere */}
+        <Ionicons name="close" size={24} color={colors.primary.DEFAULT} />
       </Pressable>
 
       <CustomAlert

@@ -1,7 +1,9 @@
-import { Modal, Text, View } from 'react-native';
+import { Modal, Text, View, ActivityIndicator } from 'react-native';
 
 import BasicButton from './BasicButton';
 import SecondaryLink from './SecondaryLink';
+
+import { colors } from '@/constants/theme';
 
 interface CustomAlertProps {
   visible: boolean;
@@ -9,28 +11,44 @@ interface CustomAlertProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  onConfirm: () => void;
-  onCancel?: () => void; // Si no se pasa, solo muestra el botón principal
+  onConfirm?: () => void; // 👇 Ahora es opcional (para cuando solo queremos botón de cancelar)
+  onCancel?: () => void;
+  isLoading?: boolean;    // 👇 Nueva prop para el estado de carga
 }
 
 const CustomAlert = ({
   visible,
   title,
   message,
-  confirmText = 'Aceptar',
+  confirmText, // Quitamos el valor por defecto para poder ocultarlo si no pasas el prop
   cancelText = 'Cancelar',
   onConfirm,
   onCancel,
+  isLoading = false,
 }: CustomAlertProps) => {
+  
+  // Manejador seguro para el botón físico de "Atrás" en Android
+  const handleRequestClose = () => {
+    if (onCancel) onCancel();
+    else if (onConfirm) onConfirm();
+  };
+
   return (
     <Modal
       transparent
       visible={visible}
       animationType="fade"
-      onRequestClose={onCancel || onConfirm} // Maneja el botón físico de "Atrás" en Android
+      statusBarTranslucent
+      onRequestClose={handleRequestClose} 
     >
       <View className="flex-1 items-center justify-center bg-background/80 px-6">
         <View className="w-full max-w-sm items-center rounded-2xl border border-primary bg-background p-6 shadow-lg">
+          
+          {/* 👇 SPINNER DE CARGA */}
+          {isLoading && (
+            // Cambia el color por el de tu variable 'primary' si tienes el código HEX a mano
+            <ActivityIndicator size="large" color={colors.primary.DEFAULT} className="mb-4" /> 
+          )}
           
           <Text className="text-center font-roboto-bold text-xl text-white">
             {title}
@@ -41,13 +59,17 @@ const CustomAlert = ({
           </Text>
 
           <View className="w-full items-center space-y-3">
-            <BasicButton 
-              title={confirmText} 
-              onPress={onConfirm} 
-              className="w-full" 
-            />
             
-            {onCancel && (
+            {/* 👇 Solo mostramos el BasicButton si le hemos pasado una función onConfirm y un texto */}
+            {onConfirm && confirmText && (
+              <BasicButton 
+                title={confirmText} 
+                onPress={onConfirm} 
+                className="w-full" 
+              />
+            )}
+            
+            {onCancel && cancelText && (
               <View className="mt-4">
                 <SecondaryLink 
                   title={cancelText} 
@@ -55,6 +77,7 @@ const CustomAlert = ({
                 />
               </View>
             )}
+            
           </View>
 
         </View>

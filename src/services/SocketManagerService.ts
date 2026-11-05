@@ -122,23 +122,33 @@ class SocketManagerService {
 
         this.socket?.emit(
           'AUTHENTICATE_WITH_TOKEN',
-          { token, worldId, characterId },
+          { 
+            token, 
+            worldId, 
+            characterId,
+            clientType: 'mobile' // Mantenemos esto para que Render no te eche
+          },
           async (res: any) => {
             if (res && res.success) {
               this.currentSession = { worldId, characterId, token };
 
               this.attachPendingListeners();
-              this.setupDefaultEvents();
+              this.setupDefaultEvents(); // Reinicia los oyentes limpiamente
 
               // Pedimos los datos del personaje a Foundry
               this.emit('REQUEST_CHARACTER_DATA', { characterId });
 
               console.log(`✅ Sesión validada | Mundo: ${worldId} | Personaje: ${characterId}`);
+              
+              // ¡CLAVE! Avisamos al Layout de que ya estamos listos para quitar la pantalla negra
+              useConnectionStore.getState().setStatus('connected');
               resolve(true);
             } else {
               console.warn('🔴 Credenciales rechazadas por Foundry. Limpiando almacenamiento...');
               await this.clearStorageSession();
               this.disconnect();
+              
+              useConnectionStore.getState().setStatus('failed'); // Mostramos botón de reintentar
               resolve(false);
             }
           }
@@ -229,6 +239,13 @@ class SocketManagerService {
   private setupDefaultEvents() {
     if (!this.socket) return;
 
+    // ¡CLAVE! Como tu idea es hacer "borrón y cuenta nueva", quitamos los oyentes 
+    // viejos antes de poner los nuevos para que no se apilen uno encima de otro.
+    this.socket.off('disconnect');
+    this.socket.off('connect');
+    this.socket.off('connect_error');
+    this.socket.off('FOUNDRY_STATUS');
+
     this.socket.on('disconnect', (reason) => {
       console.log('⚪ Desconectado:', reason);
       if (reason !== 'io client disconnect') {
@@ -237,14 +254,31 @@ class SocketManagerService {
     });
 
     this.socket.on('connect', () => {
-      console.log('🟢 WebSocket conectado/restablecido');
-      useConnectionStore.getState().setStatus('connected');
+      console.log('🟢 Red detectada. Aplicando tu idea: Borrón y cuenta nueva...');
+      
+      // Destruimos la sesión actual. Esto fuerza a connectWithToken() a no usar el
+      // "early return" (return true;) y hacer todo el proceso desde cero.
+      this.currentSession = null;
+      
+      // Empezamos de cero, como si la app acabara de abrirse
+      this.connectWithToken();
     });
 
     this.socket.on('connect_error', (error) => {
       console.error('🔴 Error Socket.io:', error.message);
       if (!this.socket?.connected) {
         useConnectionStore.getState().setStatus('failed');
+      }
+    });
+
+    this.socket.on('FOUNDRY_STATUS', (payload: { online: boolean }) => {
+      console.log(`📱 Estado de Foundry actualizado: ${payload.online ? 'ONLINE' : 'OFFLINE'}`);
+      useConnectionStore.getState().setFoundryOnline(payload.online);
+
+      // NUEVA LÓGICA: Si Foundry acaba de volver online, le pedimos los datos frescos
+      if (payload.online && this.currentSession) {
+        console.log(`🔄 Foundry ha vuelto online. Pidiendo actualización de datos...`);
+        this.emit('REQUEST_CHARACTER_DATA', { characterId: this.currentSession.characterId });
       }
     });
   }
