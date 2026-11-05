@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 
 import CustomAlert from '@/components/shared/CustomAlert';
 import { socketManager } from '@/services/SocketManagerService';
@@ -36,7 +37,10 @@ const PlayerHeader = () => {
   return (
     <View className="absolute top-4 left-4 z-50 mt-10">
       <Pressable
-        onPress={() => setShowLogoutAlert(true)}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          setShowLogoutAlert(true);
+        }}
         className="p-2 rounded-xl bg-background/80 border border-primary/30 active:opacity-70 shadow-md"
         accessibilityLabel="Desvincular personaje"
       >

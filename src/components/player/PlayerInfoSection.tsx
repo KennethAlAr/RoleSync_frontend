@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { View, Text, Image, ActivityIndicator, TouchableOpacity, Animated } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
 import { useCharacterStore } from '@/store/characterStore';
 import { useConnectionStore } from '@/store/connectionStore';
@@ -111,6 +112,7 @@ const PlayerInfoSection = () => {
               <TouchableOpacity 
                 onPress={() => {
                   if (inCombat) {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                     playerInfoService.rollInitiative();
                   } else {
                     console.log("Aún no estás en combate para tirar iniciativa");
