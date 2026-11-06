@@ -1,5 +1,6 @@
 // src/hooks/useQRScanner.ts
 import { useEffect, useState } from 'react';
+
 import { Camera } from 'expo-camera';
 import { useRouter } from 'expo-router';
 

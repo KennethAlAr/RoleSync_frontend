@@ -1,6 +1,18 @@
 import { socketManager } from './SocketManagerService';
 import { useCharacterStore } from '@/store/characterStore';
 
+/**
+ * Servicio de Gestión de Salud.
+ * 
+ * Controlador de dominio responsable de la orquestación bidireccional de los puntos 
+ * de salud (HP Base y HP Temporal) entre la interfaz gráfica, el estado local (Zustand) 
+ * y el servidor de WebSockets.
+ * 
+ * Actualiza el estado local de forma síncrona antes del servidor.
+ * Debouncing: Agrupa múltiples operaciones consecutivas de E/S en una sola emisión de red (400ms).
+ * Bloquea actualizaciones entrantes del servidor temporalmente (1000ms) tras una modificación
+ * local para evitar parpadeos y rebotes asíncronos.
+ */
 class HealthInfoService {
   private ignoreUpdatesTimeout: ReturnType<typeof setTimeout> | null = null;
   private emitHpTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -24,80 +36,69 @@ class HealthInfoService {
     }, 1000); 
   }
 
-  modifyHp(amount: number) {
+  /**
+   * Motor centralizado de actualizaciones.
+   * Unifica la lógica repetitiva de actualización local, bloqueo de ecos y emisión de red
+   * para cualquier tipo de alteración de salud.
+   * 
+   * @private
+   * @param {'hp' | 'tempHp'} type - El tipo de estadística de salud a modificar.
+   * @param {number} newValue - El valor final ya calculado y restringido.
+   */
+  private processHealthUpdate(type: 'hp' | 'tempHp', newValue: number) {
     const health = useCharacterStore.getState().healthInfo;
     const userInfo = useCharacterStore.getState().userInfo;
     if (!health || !userInfo) return;
 
-    const newHp = Math.min(Math.max(health.hp + amount, 0), health.maxHp);
-    useCharacterStore.getState().setHealthInfo({ ...health, hp: newHp });
+    useCharacterStore.getState().setHealthInfo({ ...health, [type]: newValue });
+    
     this.blockIncomingUpdates();
 
-    if (this.emitHpTimeout) clearTimeout(this.emitHpTimeout);
-    this.emitHpTimeout = setTimeout(() => {
-      socketManager.emit('UPDATE_HP', { 
-        worldId: userInfo.worldId,
-        characterId: userInfo.characterId,
-        hp: newHp 
-      });
-    }, 400);
+    const payload = { 
+      worldId: userInfo.worldId, 
+      characterId: userInfo.characterId, 
+      [type]: newValue 
+    };
+
+    if (type === 'hp') {
+      if (this.emitHpTimeout) clearTimeout(this.emitHpTimeout);
+      this.emitHpTimeout = setTimeout(() => socketManager.emit('UPDATE_HP', payload), 400);
+    } else {
+      if (this.emitTempHpTimeout) clearTimeout(this.emitTempHpTimeout);
+      this.emitTempHpTimeout = setTimeout(() => socketManager.emit('UPDATE_TEMP_HP', payload), 400);
+    }
+  }
+
+  modifyHp(amount: number) {
+    const health = useCharacterStore.getState().healthInfo;
+    if (!health) return;
+    
+    const newHp = Math.min(Math.max(health.hp + amount, 0), health.maxHp);
+    this.processHealthUpdate('hp', newHp);
   }
 
   modifyTempHp(amount: number) {
     const health = useCharacterStore.getState().healthInfo;
-    const userInfo = useCharacterStore.getState().userInfo;
-    if (!health || !userInfo) return;
+    if (!health) return;
 
     const newTemp = Math.max(health.tempHp + amount, 0);
-    useCharacterStore.getState().setHealthInfo({ ...health, tempHp: newTemp });
-    this.blockIncomingUpdates();
-
-    if (this.emitTempHpTimeout) clearTimeout(this.emitTempHpTimeout);
-    this.emitTempHpTimeout = setTimeout(() => {
-      socketManager.emit('UPDATE_TEMP_HP', { 
-        worldId: userInfo.worldId,
-        characterId: userInfo.characterId,
-        tempHp: newTemp 
-      });
-    }, 400);
+    this.processHealthUpdate('tempHp', newTemp);
   }
 
   setHp(val: number) {
     const health = useCharacterStore.getState().healthInfo;
-    const userInfo = useCharacterStore.getState().userInfo;
-    if (!health || !userInfo) return;
+    if (!health) return;
 
     const newHp = Math.min(Math.max(val, 0), health.maxHp);
-    useCharacterStore.getState().setHealthInfo({ ...health, hp: newHp });
-    this.blockIncomingUpdates();
-
-    if (this.emitHpTimeout) clearTimeout(this.emitHpTimeout);
-    this.emitHpTimeout = setTimeout(() => {
-      socketManager.emit('UPDATE_HP', { 
-        worldId: userInfo.worldId,
-        characterId: userInfo.characterId,
-        hp: newHp 
-      });
-    }, 400);
+    this.processHealthUpdate('hp', newHp);
   }
 
   setTempHp(val: number) {
     const health = useCharacterStore.getState().healthInfo;
-    const userInfo = useCharacterStore.getState().userInfo;
-    if (!health || !userInfo) return;
+    if (!health) return;
 
     const newTemp = Math.max(val, 0);
-    useCharacterStore.getState().setHealthInfo({ ...health, tempHp: newTemp });
-    this.blockIncomingUpdates();
-
-    if (this.emitTempHpTimeout) clearTimeout(this.emitTempHpTimeout);
-    this.emitTempHpTimeout = setTimeout(() => {
-      socketManager.emit('UPDATE_TEMP_HP', { 
-        worldId: userInfo.worldId,
-        characterId: userInfo.characterId,
-        tempHp: newTemp 
-      });
-    }, 400);
+    this.processHealthUpdate('tempHp', newTemp);
   }
 }
 
