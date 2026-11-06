@@ -1,10 +1,21 @@
-import { useState, useEffect } from 'react';
 import { View, Text, TextInput } from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { useNumericInput } from '@/hooks/useNumericInput';
+
 import { colors } from '@/constants/theme';
 
+/**
+ * Propiedades esperadas para el componente StatInputBar.
+ * 
+ * @interface StatInputBarProps
+ * @property {number} value - El valor numérico actual de la estadística (ej. HP actual).
+ * @property {number} [maxValue] - (Opcional) El límite máximo de la estadística.
+ * @property {(val: number) => void} onChangeText - Callback que emite el valor numérico tras ser validado.
+ * @property {string} innerColor1 - Color inicial para el gradiente de la barra de llenado.
+ * @property {string} innerColor2 - Color final para el gradiente de la barra de llenado.
+ */
 interface StatInputBarProps {
   value: number;
   maxValue?: number;
@@ -13,6 +24,20 @@ interface StatInputBarProps {
   innerColor2: string;
 }
 
+/**
+ * Barra Interactiva de Estadísticas (StatInputBar).
+ * 
+ * Componente visual de interfaz que combina la representación 
+ * gráfica de barras de progreso dinámicas con un campo numérico editable.
+ * 
+ * Delega la validación de entrada, sanitización de caracteres y gestión del estado del texto 
+ * al hook genérico `useNumericInput`. Su responsabilidad principal es el renderizado 
+ * condicional de la geometría de las barras y la representación de gradientes en función 
+ * del estado y del valor máximo proporcionado.
+ * 
+ * @param {StatInputBarProps} props - Propiedades del componente.
+ * @returns {JSX.Element} Barra de estado visual con campo de entrada numérico centrado.
+ */
 const StatInputBar = ({ 
   value, 
   maxValue, 
@@ -21,42 +46,10 @@ const StatInputBar = ({
   innerColor2
 }: StatInputBarProps) => {
   
-  const [textValue, setTextValue] = useState(value.toString());
-
-  useEffect(() => {
-    if (parseInt(textValue || '0', 10) === value) return;
-    setTextValue(value.toString());
-  }, [value]);
+  const { textValue, handleTextChange, handleBlur } = useNumericInput(value, maxValue, onChangeText);
 
   const percentage = maxValue ? Math.min(Math.max((value / maxValue) * 100, 0), 100) : 0;
   const isTempHpActive = maxValue === undefined && value > 0;
-
-  const handleBlur = () => {
-    if (textValue === '') {
-      setTextValue('0');
-      onChangeText(0);
-    }
-  };
-
-  const handleTextChange = (val: string) => {
-    const cleanText = val.replace(/[^0-9]/g, '');
-
-    if (cleanText === '') {
-      setTextValue('');
-      onChangeText(0);
-      return;
-    }
-
-    let parsed = parseInt(cleanText, 10);
-    if (isNaN(parsed)) parsed = 0;
-
-    if (maxValue !== undefined && parsed > maxValue) {
-      parsed = maxValue;
-    }
-
-    setTextValue(parsed.toString());
-    onChangeText(parsed);
-  };
 
   return (
     <View className="flex-1 bg-black/50 border border-primary h-10 rounded-xl overflow-hidden relative justify-center">

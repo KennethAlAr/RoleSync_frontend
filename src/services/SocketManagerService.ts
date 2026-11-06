@@ -1,22 +1,11 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// src/services/SocketManagerService.ts
 import { io, Socket } from 'socket.io-client';
 import { AppState } from 'react-native';
 
 import { useConnectionStore } from '@/store/connectionStore';
+import { authService, SessionData } from './AuthService';
 
-// URL por defecto en Render si no se define en las variables de entorno
 const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'https://rolesync-server.onrender.com';
-
-// Claves de almacenamiento persistente independientes
-const WORLD_ID_KEY = 'roleSyncWorldId';
-const CHARACTER_ID_KEY = 'roleSyncCharacterId';
-const TOKEN_KEY = 'roleSyncToken';
-
-export interface SessionData {
-  worldId: string;
-  characterId: string;
-  token: string;
-}
 
 class SocketManagerService {
   private socket: Socket | null = null;
@@ -24,204 +13,179 @@ class SocketManagerService {
   private pendingListeners: { eventName: string; callback: (data: any) => void }[] = [];
 
   constructor() {
+    this.setupAppStateListener();
+  }
+
+  // ==========================================
+  // 1. GESTIÓN DEL CICLO DE VIDA (APP STATE)
+  // ==========================================
+  private setupAppStateListener() {
     AppState.addEventListener('change', (nextAppState) => {
-      // Si la app vuelve de estar minimizada o bloqueada...
       if (nextAppState === 'active') {
         console.log('📱 App vuelve a primer plano. Aplicando borrón y cuenta nueva...');
-        
-        // 1. Borramos la memoria
-        this.currentSession = null;
-        
-        // 2. Asesinamos al socket viejo por si se quedó colgado en el limbo
-        if (this.socket) {
-          this.socket.disconnect();
-          this.socket = null;
-        }
-
-        // 3. Reutilizamos el método que ya hace la magia desde cero
+        this.resetConnection();
         this.connectWithToken();
       }
     });
   }
 
-  public isConnected(): boolean {
-    return !!this.socket && this.socket.connected;
-  }
-
-  /**
-   * Limpia las 3 claves guardadas en AsyncStorage
-   */
-  private async clearStorageSession(): Promise<void> {
-    await Promise.all([
-      AsyncStorage.removeItem(WORLD_ID_KEY),
-      AsyncStorage.removeItem(CHARACTER_ID_KEY),
-      AsyncStorage.removeItem(TOKEN_KEY),
-    ]);
-  }
-
-  /**
-   * 1. Conexión inicial canjeando el código OTP escaneado del QR
-   */
-  public async connectWithOtp(
-    otp: string,
-    serverUrl: string = SOCKET_URL
-  ): Promise<{ success: boolean; worldId?: string; characterId?: string; error?: string }> {
+  private resetConnection() {
+    this.currentSession = null;
     if (this.socket) {
-      this.disconnect();
+      this.socket.disconnect();
+      this.socket = null;
     }
+  }
+
+  // ==========================================
+  // 2. MÉTODOS DE AUTENTICACIÓN Y CONEXIÓN
+  // ==========================================
+  
+  /** Conexión inicial escaneando el QR */
+  public async connectWithOtp(otp: string, serverUrl: string = SOCKET_URL): Promise<{ success: boolean; worldId?: string; characterId?: string; error?: string }> {
+    this.resetConnection();
 
     return new Promise((resolve) => {
-      this.socket = io(serverUrl, {
-        transports: ['websocket'],
-        autoConnect: true,
-      });
+      this.socket = io(serverUrl, { transports: ['websocket'], autoConnect: true });
 
       this.socket.on('connect', () => {
-        console.log(`🔌 Conectado al servidor (${this.socket?.id}). Canjeando OTP: ${otp}...`);
+        console.log(`🔌 Conectado al servidor. Canjeando OTP...`);
 
         this.socket?.emit('REDEEM_OTP', { otp }, async (res: any) => {
-          if (res && res.success) {
-            // Guardamos los 3 datos en AsyncStorage
-            await Promise.all([
-              AsyncStorage.setItem(WORLD_ID_KEY, res.worldId),
-              AsyncStorage.setItem(CHARACTER_ID_KEY, res.characterId),
-              AsyncStorage.setItem(TOKEN_KEY, res.token),
-            ]);
-
-            console.log('✅ OTP canjeado con éxito. Validando sesión con token...');
-
-            // Delegamos toda la inicialización y validación a connectWithToken
+          if (res?.success) {
+            await authService.saveSession(res.worldId, res.characterId, res.token);
             const authenticated = await this.connectWithToken(serverUrl);
-
-            if (authenticated) {
-              resolve({ success: true, worldId: res.worldId, characterId: res.characterId });
-            } else {
-              resolve({ success: false, error: 'Foundry rechazó la validación del token.' });
-            }
+            resolve({ 
+              success: authenticated, 
+              worldId: res.worldId, 
+              characterId: res.characterId,
+              error: authenticated ? undefined : 'Foundry rechazó la validación del token.'
+            });
           } else {
-            console.warn('🔴 Fallo de autenticación por OTP:', res?.error);
             this.disconnect();
             resolve({ success: false, error: res?.error || 'Código OTP inválido o expirado.' });
           }
         });
       });
 
-      this.socket.on('connect_error', (error) => {
-        console.error('🔴 Error de conexión WebSocket:', error.message);
-        resolve({ success: false, error: 'No se pudo conectar con el servidor.' });
-      });
+      this.socket.on('connect_error', () => resolve({ success: false, error: 'No se pudo conectar con el servidor.' }));
     });
   }
 
-  /**
-   * 2. Único punto de inicio de sesión: valida credenciales con Foundry e inicializa listeners
-   */
+  /** Conexión de re-ingreso (Lee sesión y valida con Render) */
   public async connectWithToken(serverUrl: string = SOCKET_URL): Promise<boolean> {
-    const [worldId, characterId, token] = await Promise.all([
-      AsyncStorage.getItem(WORLD_ID_KEY),
-      AsyncStorage.getItem(CHARACTER_ID_KEY),
-      AsyncStorage.getItem(TOKEN_KEY),
-    ]);
-
-    if (!worldId || !characterId || !token) {
-      await this.clearStorageSession();
+    const session = await authService.getSession();
+    if (!session) {
+      await authService.clearSession();
       return false;
     }
 
-    if (this.socket?.connected && this.currentSession) return true;
+    if (this.isConnected() && this.currentSession) return true;
 
-    // Si no hay socket activo, lo creamos
-    if (!this.socket || !this.socket.connected) {
-      this.socket = io(serverUrl, {
-        transports: ['websocket'],
-        autoConnect: true,
-      });
+    if (!this.socket) {
+      this.socket = io(serverUrl, { transports: ['websocket'], autoConnect: true });
     }
 
     return new Promise((resolve) => {
       const authenticate = () => {
-        console.log('🔌 Autenticando con credenciales en la sala...');
-
-        this.socket?.emit(
-          'AUTHENTICATE_WITH_TOKEN',
-          { 
-            token, 
-            worldId, 
-            characterId,
-            clientType: 'mobile' // Mantenemos esto para que Render no te eche
-          },
-          async (res: any) => {
-            if (res && res.success) {
-              this.currentSession = { worldId, characterId, token };
-
-              this.attachPendingListeners();
-              this.setupDefaultEvents(); // Reinicia los oyentes limpiamente
-
-              // Pedimos los datos del personaje a Foundry
-              this.emit('REQUEST_CHARACTER_DATA', { characterId });
-
-              console.log(`✅ Sesión validada | Mundo: ${worldId} | Personaje: ${characterId}`);
-              
-              // ¡CLAVE! Avisamos al Layout de que ya estamos listos para quitar la pantalla negra
-              useConnectionStore.getState().setStatus('connected');
-              resolve(true);
-            } else {
-              console.warn('🔴 Credenciales rechazadas por Foundry. Limpiando almacenamiento...');
-              await this.clearStorageSession();
-              this.disconnect();
-              
-              useConnectionStore.getState().setStatus('failed'); // Mostramos botón de reintentar
-              resolve(false);
-            }
+        this.socket?.emit('AUTHENTICATE_WITH_TOKEN', { ...session, clientType: 'mobile' }, async (res: any) => {
+          if (res?.success) {
+            this.currentSession = session;
+            this.setupDefaultEvents();
+            this.attachPendingListeners();
+            this.emit('REQUEST_CHARACTER_DATA', { characterId: session.characterId });
+            
+            useConnectionStore.getState().setStatus('connected');
+            resolve(true);
+          } else {
+            await authService.clearSession();
+            this.disconnect();
+            useConnectionStore.getState().setStatus('failed');
+            resolve(false);
           }
-        );
+        });
       };
 
-      if (this.socket?.connected) {
-        authenticate();
-      } else {
+      if (this.socket?.connected) authenticate();
+      else {
         this.socket?.once('connect', authenticate);
         this.socket?.once('connect_error', () => resolve(false));
       }
     });
   }
 
-  /**
-   * Emite eventos al servidor verificando previamente el estado de la conexión
-   */
+  // ==========================================
+  // 3. LISTENERS Y EVENTOS INTERNOS
+  // ==========================================
+  private setupDefaultEvents() {
+    if (!this.socket) return;
+    
+    // Limpiamos los eventos previos para evitar duplicados
+    this.socket.removeAllListeners('disconnect');
+    this.socket.removeAllListeners('connect');
+    this.socket.removeAllListeners('connect_error');
+    this.socket.removeAllListeners('FOUNDRY_STATUS');
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('⚪ Desconectado:', reason);
+      if (reason !== 'io client disconnect') useConnectionStore.getState().setStatus('reconnecting');
+    });
+
+    this.socket.on('connect', () => {
+      console.log('🟢 Red detectada (reconectando socket). Borrón y cuenta nueva...');
+      this.currentSession = null;
+      this.connectWithToken();
+    });
+
+    this.socket.on('connect_error', () => {
+      if (!this.socket?.connected) useConnectionStore.getState().setStatus('failed');
+    });
+
+    this.socket.on('FOUNDRY_STATUS', (payload: { online: boolean }) => {
+      useConnectionStore.getState().setFoundryOnline(payload.online);
+      if (payload.online && this.currentSession) {
+        setTimeout(() => {
+          if (this.currentSession) {
+            this.emit('REQUEST_CHARACTER_DATA', { characterId: this.currentSession.characterId });
+          }
+        }, 1000);
+      }
+    });
+  }
+
+  // ==========================================
+  // 4. API PÚBLICA DE SOCKETS (Emit / On / Off)
+  // ==========================================
+  public isConnected(): boolean {
+    return !!this.socket && this.socket.connected;
+  }
+
+  public getSession(): SessionData | null {
+    return this.currentSession;
+  }
+
   public emit(eventName: string, data: any = {}) {
-    if (this.socket && this.socket.connected) {
-      this.socket.emit(eventName, data);
-      console.log(`📤 Evento '${eventName}' enviado`);
-    } else {
-      console.warn(`⚠️ No se pudo enviar '${eventName}': Socket desconectado`);
-    }
+    if (this.isConnected()) this.socket?.emit(eventName, data);
   }
 
-  /**
-   * Registra un listener de eventos
-   */
   public on(eventName: string, callback: (data: any) => void) {
-    if (!this.socket) {
-      this.pendingListeners.push({ eventName, callback });
-      return;
-    }
-    this.socket.on(eventName, callback);
+    if (!this.socket) this.pendingListeners.push({ eventName, callback });
+    else this.socket.on(eventName, callback);
   }
 
-  /**
-   * Remueve un listener registrado
-   */
   public off(eventName: string, callback?: (data: any) => void) {
-    if (this.socket) {
-      this.socket.off(eventName, callback);
-    }
+    this.socket?.off(eventName, callback);
     this.pendingListeners = this.pendingListeners.filter((l) => l.eventName !== eventName);
   }
 
-  /**
-   * Cierra el canal WebSocket y limpia la sesión activa en memoria RAM
-   */
+  private attachPendingListeners() {
+    if (!this.socket) return;
+    this.pendingListeners.forEach((l) => this.socket?.on(l.eventName, l.callback));
+  }
+
+  // ==========================================
+  // 5. CERRAR SESIÓN Y LIMPIEZA
+  // ==========================================
   public disconnect() {
     if (this.socket) {
       this.socket.disconnect();
@@ -230,79 +194,13 @@ class SocketManagerService {
     }
   }
 
-  /**
-   * Cierra sesión completamente: borra los 3 datos del almacenamiento y corta la conexión
-   */
   public async logout() {
     if (this.currentSession) {
-      this.emit('REVOKE_TOKEN', {
-        worldId: this.currentSession.worldId,
-        characterId: this.currentSession.characterId,
-        token: this.currentSession.token
-      });
+      this.emit('REVOKE_TOKEN', this.currentSession);
     }
-
-    await this.clearStorageSession();
+    await authService.clearSession();
     this.disconnect();
     useConnectionStore.getState().setStatus('connected');
-  }
-
-  public getSession(): SessionData | null {
-    return this.currentSession;
-  }
-
-  private attachPendingListeners() {
-    if (!this.socket) return;
-    this.pendingListeners.forEach((listener) => {
-      this.socket?.on(listener.eventName, listener.callback);
-    });
-  }
-
-  private setupDefaultEvents() {
-    if (!this.socket) return;
-
-    // ¡CLAVE! Como tu idea es hacer "borrón y cuenta nueva", quitamos los oyentes 
-    // viejos antes de poner los nuevos para que no se apilen uno encima de otro.
-    this.socket.off('disconnect');
-    this.socket.off('connect');
-    this.socket.off('connect_error');
-    this.socket.off('FOUNDRY_STATUS');
-
-    this.socket.on('disconnect', (reason) => {
-      console.log('⚪ Desconectado:', reason);
-      if (reason !== 'io client disconnect') {
-        useConnectionStore.getState().setStatus('reconnecting');
-      }
-    });
-
-    this.socket.on('connect', () => {
-      console.log('🟢 Red detectada. Aplicando tu idea: Borrón y cuenta nueva...');
-      
-      // Destruimos la sesión actual. Esto fuerza a connectWithToken() a no usar el
-      // "early return" (return true;) y hacer todo el proceso desde cero.
-      this.currentSession = null;
-      
-      // Empezamos de cero, como si la app acabara de abrirse
-      this.connectWithToken();
-    });
-
-    this.socket.on('connect_error', (error) => {
-      console.error('🔴 Error Socket.io:', error.message);
-      if (!this.socket?.connected) {
-        useConnectionStore.getState().setStatus('failed');
-      }
-    });
-
-    this.socket.on('FOUNDRY_STATUS', (payload: { online: boolean }) => {
-      console.log(`📱 Estado de Foundry actualizado: ${payload.online ? 'ONLINE' : 'OFFLINE'}`);
-      useConnectionStore.getState().setFoundryOnline(payload.online);
-
-      // NUEVA LÓGICA: Si Foundry acaba de volver online, le pedimos los datos frescos
-      if (payload.online && this.currentSession) {
-        console.log(`🔄 Foundry ha vuelto online. Pidiendo actualización de datos...`);
-        this.emit('REQUEST_CHARACTER_DATA', { characterId: this.currentSession.characterId });
-      }
-    });
   }
 }
 

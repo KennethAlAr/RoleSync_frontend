@@ -1,124 +1,38 @@
-import { useEffect, useState } from 'react';
+// src/app/scanner/index.tsx (o tu ruta correspondiente)
 import { StyleSheet, Text, View } from 'react-native';
-
-import { Camera, CameraView } from 'expo-camera';
+import { CameraView } from 'expo-camera';
 import { useRouter } from 'expo-router';
 
-import { useConnectionStore } from '@/store/connectionStore';
 import CustomAlert from '@/components/shared/CustomAlert';
 import SecondaryLink from '@/components/shared/SecondaryLink';
-import { socketManager } from '@/services/SocketManagerService';
-import { useCharacterStore } from '@/store/characterStore';
+import { useQRScanner } from '@/hooks/useQRScanner';
 
+/**
+ * Pantalla de Escáner QR (Capa de Presentación).
+ * 
+ * Implementa el patrón de diseño de componentes de presentación.
+ * Consume los estados y manejadores proporcionados por el Custom Hook `useQRScanner` 
+ * para renderizar dinámicamente la interfaz gráfica de hardware.
+ * 
+ * Gestiona de forma reactiva tres estados visuales principales:
+ * 1. Pantalla de carga mientras el sistema operativo evalúa los permisos.
+ * 2. Vista alternativa si los permisos de hardware son denegados.
+ * 3. Visor óptico de la cámara y sistema de modales interactivos para el proceso de vinculación.
+ * 
+ * @returns {JSX.Element} Interfaz gráfica del escáner y alertas asociadas.
+ */
 const ScannerScreen = () => {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [scanned, setScanned] = useState(false);
   const router = useRouter();
+  
+  // Consumo del Custom Hook que expone la lógica de negocio
+  const { hasPermission, scanned, alertConfig, handleQRScanned } = useQRScanner();
 
-  // Estado para controlar nuestro CustomAlert
-  const [alertConfig, setAlertConfig] = useState({
-    visible: false,
-    title: '',
-    message: '',
-    confirmText: 'Aceptar',
-    cancelText: 'Cancelar' as string | undefined,
-    onConfirm: () => {},
-    onCancel: undefined as (() => void) | undefined,
-  });
-
-  useEffect(() => {
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
-    })();
-  }, []);
-
-  const resetScanner = () => {
-    setAlertConfig((prev) => ({ ...prev, visible: false }));
-    setScanned(false);
-  };
-
-  const handleQRScanned = ({ data }: { data: string }) => {
-    setScanned(true);
-    const otp = data.trim();
-
-    if (!/^\d{6}$/.test(otp)) {
-      setAlertConfig({
-        visible: true,
-        title: 'Código QR no válido',
-        message: 'El código escaneado no pertenece a Role-Sync (debe ser un OTP de 6 dígitos).',
-        confirmText: 'Reintentar',
-        cancelText: undefined,
-        onConfirm: resetScanner,
-        onCancel: undefined,
-      });
-      return;
-    }
-
-    // Modal de confirmación
-    setAlertConfig({
-      visible: true,
-      title: 'Código Encontrado',
-      message: `¿Deseas vincular tu personaje con el código ${otp}?`,
-      confirmText: 'Conectar',
-      cancelText: 'Cancelar',
-      onCancel: resetScanner,
-      onConfirm: async () => {
-        // Actualizamos el modal visualmente para mostrar que está conectando
-        setAlertConfig((prev) => ({
-          ...prev,
-          title: 'Conectando...',
-          message: 'Verificando con el servidor...',
-          confirmText: 'Esperando...',
-          onCancel: undefined, // Quitamos el botón cancelar mientras procesa
-          onConfirm: () => {},
-        }));
-
-        try {
-          const response = await socketManager.connectWithOtp(otp);
-
-          if (response.success && response.worldId && response.characterId) {
-            useCharacterStore.getState().setUserInfo({
-              worldId: response.worldId,
-              characterId: response.characterId,
-            });
-            
-            // LA CLAVE: Avisamos al estado global antes de hacer la redirección
-            useConnectionStore.getState().setAuthStatus('authenticated');
-            
-            setAlertConfig((prev) => ({ ...prev, visible: false }));
-            router.replace('/player');
-          } else {
-            setAlertConfig({
-              visible: true,
-              title: 'Fallo de conexión',
-              message: response.error || 'Código caducado o inválido.',
-              confirmText: 'Reintentar',
-              cancelText: undefined,
-              onConfirm: resetScanner,
-              onCancel: undefined,
-            });
-          }
-        } catch (error: any) {
-          console.error('Error de red detallado:', error);
-          setAlertConfig({
-            visible: true,
-            title: 'Excepción detectada',
-            message: error?.message || JSON.stringify(error),
-            confirmText: 'Reintentar',
-            cancelText: undefined,
-            onConfirm: resetScanner,
-            onCancel: undefined,
-          });
-        }
-      },
-    });
-  };
-
+  // 1. Estado visual de carga: Negociando permisos
   if (hasPermission === null) {
     return <View className="flex-1" />;
   }
 
+  // 2. Estado visual de error: Permisos denegados
   if (hasPermission === false) {
     return (
       <View className="flex-1 justify-center items-center p-6">
@@ -134,14 +48,14 @@ const ScannerScreen = () => {
     );
   }
 
+  // 3. Estado visual principal: Renderizado de la cámara
   return (
     <View className="flex-1 justify-center items-center p-6 py-10">
+      
       <View className="w-96 h-96 rounded-2xl overflow-hidden border-2 border-primary shadow-2xl bg-black">
         <CameraView
           style={StyleSheet.absoluteFill}
-          barcodeScannerSettings={{
-            barcodeTypes: ['qr'],
-          }}
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
           onBarcodeScanned={scanned ? undefined : handleQRScanned}
         />
       </View>

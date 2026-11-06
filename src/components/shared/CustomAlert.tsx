@@ -5,29 +5,64 @@ import SecondaryLink from './SecondaryLink';
 
 import { colors } from '@/constants/theme';
 
+/**
+ * Propiedades esperadas para el componente CustomAlert.
+ * 
+ * @interface CustomAlertProps
+ * @property {boolean} visible - Controla la renderización y visibilidad del modal superpuesto.
+ * @property {string} title - Título principal de la alerta.
+ * @property {string} message - Cuerpo descriptivo del mensaje.
+ * @property {string} [confirmText] - (Opcional) Texto para el botón de acción principal.
+ * @property {string} [cancelText] - (Opcional) Texto para el botón de acción secundaria o descarte.
+ * @property {() => void} [onConfirm] - (Opcional) Callback ejecutado al pulsar la acción principal.
+ * @property {() => void} [onCancel] - (Opcional) Callback ejecutado al pulsar la acción secundaria.
+ * @property {boolean} [isLoading] - (Opcional) Determina si se renderiza un indicador de carga (spinner).
+ */
 interface CustomAlertProps {
   visible: boolean;
   title: string;
   message: string;
   confirmText?: string;
   cancelText?: string;
-  onConfirm?: () => void; // 👇 Ahora es opcional (para cuando solo queremos botón de cancelar)
+  onConfirm?: () => void; 
   onCancel?: () => void;
-  isLoading?: boolean;    // 👇 Nueva prop para el estado de carga
+  isLoading?: boolean;    
 }
 
+/**
+ * Alerta Modal Personalizada.
+ * 
+ * Componente de interfaz diseñado para unificar la presentación de avisos, diálogos
+ * de confirmación y estados de bloqueo por red en toda la aplicación.
+ * 
+ * Implementa renderizado condicional de sus elementos interactivos: permite configurar 
+ * alertas informativas de un solo botón, diálogos de confirmación binarios, o modales 
+ * de carga bloqueantes.
+ * 
+ * Gestiona de forma nativa la interacción con el botón físico "Atrás" en dispositivos 
+ * Android para prevenir inconsistencias en el estado de navegación.
+ * 
+ * @param {CustomAlertProps} props - Propiedades del componente.
+ * @returns {JSX.Element} Pantalla modal superpuesta con transiciones nativas.
+ */
 const CustomAlert = ({
   visible,
   title,
   message,
-  confirmText, // Quitamos el valor por defecto para poder ocultarlo si no pasas el prop
+  confirmText,
   cancelText = 'Cancelar',
   onConfirm,
   onCancel,
   isLoading = false,
 }: CustomAlertProps) => {
   
-  // Manejador seguro para el botón físico de "Atrás" en Android
+  /**
+   * Manejador de interrupción nativa.
+   * Intercepta la pulsación del botón de retroceso del sistema operativo Android.
+   * Prioriza la ejecución de la acción de descarte (Cancel) si existe,
+   * o en su defecto la acción de confirmación (Confirm) para garantizar que 
+   * el flujo de la aplicación no se quede bloqueado.
+   */
   const handleRequestClose = () => {
     if (onCancel) onCancel();
     else if (onConfirm) onConfirm();
@@ -44,10 +79,13 @@ const CustomAlert = ({
       <View className="flex-1 items-center justify-center bg-background/80 px-6">
         <View className="w-full max-w-sm items-center rounded-2xl border border-primary bg-background p-6 shadow-lg">
           
-          {/* 👇 SPINNER DE CARGA */}
+          {/* Capa de estado de carga: Renderizado condicional del spinner */}
           {isLoading && (
-            // Cambia el color por el de tu variable 'primary' si tienes el código HEX a mano
-            <ActivityIndicator size="large" color={colors.primary.DEFAULT} className="mb-4" /> 
+            <ActivityIndicator 
+              size="large" 
+              color={colors.primary.DEFAULT} 
+              className="mb-4" 
+            /> 
           )}
           
           <Text className="text-center font-roboto-bold text-xl text-white">
@@ -58,9 +96,9 @@ const CustomAlert = ({
             {message}
           </Text>
 
+          {/* Capa de interacción: Árbol de botones condicionales */}
           <View className="w-full items-center space-y-3">
             
-            {/* 👇 Solo mostramos el BasicButton si le hemos pasado una función onConfirm y un texto */}
             {onConfirm && confirmText && (
               <BasicButton 
                 title={confirmText} 

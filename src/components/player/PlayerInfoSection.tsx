@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
 import { View, Text, Image, ActivityIndicator, TouchableOpacity, Animated } from 'react-native';
+
 import { FontAwesome6 } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
@@ -9,42 +9,32 @@ import { playerInfoService } from '@/services/PlayerInfoService';
 
 import AcBadge from '@/components/player/AcBadge';
 import CombatStatPill from '@/components/player/CombatStatPill';
+import { useCombatAnimation } from '@/hooks/useCombatAnimation';
 
 import { colors } from '@/constants/theme';
 
+/**
+ * Sección de Información Principal del Jugador (PlayerInfoSection).
+ * 
+ * Renderiza el cuadro de mandos principal (HUD) del personaje. Muestra la identidad 
+ * (nombre, clase, nivel, avatar), las estadísticas estáticas (Clase de Armadura, 
+ * Competencia, Velocidad) y un indicador visual del estado de red.
+ * 
+ * Gestiona el estado de combate renderizando la estadística de Iniciativa como un 
+ * botón interactivo animado cuando el jugador debe realizar una tirada.
+ * 
+ * @returns {JSX.Element} La cabecera visual de la ficha del personaje.
+ */
 const PlayerInfoSection = () => {
   const playerInfo = useCharacterStore((state) => state.playerInfo);
   const { status, isFoundryOnline } = useConnectionStore();
 
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (playerInfo?.inCombat) {
-      // Si está en combate, iniciamos el bucle de latido
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.15, // Crece un 8%
-            duration: 700,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1, // Vuelve al tamaño original
-            duration: 700,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } else {
-      // Si no está en combate, detenemos/reseteamos la animación
-      pulseAnim.setValue(1);
-    }
-  }, [playerInfo?.inCombat]);
+  const { pulseAnim, animatedOpacity } = useCombatAnimation(playerInfo?.inCombat);
 
   if (!playerInfo) {
     return (
       <View className="flex-1 justify-center items-center py-10">
-        <ActivityIndicator size="large" color="#d4af37" />
+        <ActivityIndicator size="large" color={colors.primary.DEFAULT} />
         <Text className="text-primary mt-4 font-roboto-regular">Sincronizando jugador...</Text>
       </View>
     );
@@ -52,22 +42,10 @@ const PlayerInfoSection = () => {
 
   const { name, className, level, avatarImage, ac, initiative, proficiency, speed, inCombat } = playerInfo;
 
-  // Si está en combate (activo para tirar), hacemos que la opacidad palpite entre 0.85 y 1.2 (más brillante)
-  // Si NO está en combate, se queda estricta y normalmente en 1.
-  const animatedOpacity = inCombat
-    ? pulseAnim.interpolate({
-        inputRange: [1, 1.15],
-        outputRange: [0.5, 1], // Al latir, pasa de un tono normal a full brillo
-      })
-    : 1; // Normal por defecto
-
   let statusColor = "bg-green-500";
-
   if (status !== 'connected') {
-    // Si el MÓVIL pierde la conexión o está reconectando -> ROJO
     statusColor = "bg-red-500";
   } else if (!isFoundryOnline) {
-    // Si el móvil está bien pero FOUNDRY se ha caído -> NARANJA
     statusColor = "bg-orange-500";
   }
 
@@ -102,31 +80,30 @@ const PlayerInfoSection = () => {
 
       <View className="items-center mb-4">
         <View className="flex-row justify-center gap-36 w-full">
+          
           {inCombat ? (
             <Animated.View 
-              style={{ 
-                transform: [{ scale: pulseAnim }],
-                opacity: animatedOpacity 
-              }}
+              style={{ transform: [{ scale: pulseAnim }], opacity: animatedOpacity }}
             >
               <TouchableOpacity 
                 onPress={() => {
-                  if (inCombat) {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                    playerInfoService.rollInitiative();
-                  } else {
-                    console.log("Aún no estás en combate para tirar iniciativa");
-                  }
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                  playerInfoService.rollInitiative();
                 }}
               >
-                <CombatStatPill statNumber={<FontAwesome6 name="dice-d20" size={24} color={colors.glow} />} statName="Iniciativa"/> 
+                <CombatStatPill 
+                  statNumber={<FontAwesome6 name="dice-d20" size={24} color={colors.glow} />} 
+                  statName="Iniciativa"
+                /> 
               </TouchableOpacity>
             </Animated.View>
           ) : (
             <CombatStatPill statNumber={initiative} statName="Iniciativa" />
           )}
+
           <CombatStatPill statNumber={proficiency} statName="Competencia"/>
         </View>
+        
         <View className="-mt-8">
           <CombatStatPill statNumber={speed.toString()} statName="Velocidad"/>
         </View>
