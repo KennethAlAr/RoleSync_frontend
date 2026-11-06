@@ -14,7 +14,7 @@ Aplicación móvil complementaria para el ecosistema **RoleSync**. Actúa como u
 Este repositorio es una de las tres piezas que componen el Trabajo de Fin de Grado (TFG). Para que el sistema funcione correctamente, los componentes deben iniciarse en el siguiente orden:
 
 1. **[RoleSync Server](https://github.com/KennethAlAr/RoleSync_server):** Servidor Node.js intermediario (Relay Server) que gestiona los WebSockets. *(Se inicia primero)*.
-2. **[RoleSync Foundry Module]():** Módulo instalado en el VTT del Dungeon Master. Genera el código QR de vinculación al detectar el servidor.
+2. **[RoleSync Foundry Module](https://github.com/KennethAlAr/RoleSync_module):** Módulo instalado en el VTT del Dungeon Master. Genera el código QR de vinculación al detectar el servidor.
 3. **RoleSync Mobile App (Este repositorio):** Aplicación del jugador. Escanea el QR para establecer el túnel en tiempo real.
 
 ---
